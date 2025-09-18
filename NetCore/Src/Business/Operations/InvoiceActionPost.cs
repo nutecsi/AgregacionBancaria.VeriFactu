@@ -1,4 +1,4 @@
-﻿/*
+/*
     This file is part of the VeriFactu (R) project.
     Copyright (c) 2024-2025 Irene Solutions SL
     Authors: Irene Solutions SL.
@@ -217,7 +217,7 @@ namespace VeriFactu.Business.Operations
         /// <summary>
         /// Gestor de cadena de bloques para el registro.
         /// </summary>
-        public Blockchain.Blockchain BlockchainManager { get; private set; }   
+        public Blockchain.IBlockchain BlockchainManager { get; private set; }   
 
         #endregion
 

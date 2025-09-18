@@ -1,4 +1,4 @@
-﻿/*
+/*
     This file is part of the VeriFactu (R) project.
     Copyright (c) 2024-2025 Irene Solutions SL
     Authors: Irene Solutions SL.
@@ -362,12 +362,15 @@ namespace VeriFactu.Config
         [XmlElement("LogPath")]
         public string LogPath { get; set; }
 
-        /// <summary>
-        /// Número de serie del certificado a utilizar. Mediante este número
-        /// de serie se selecciona del almacén de certificados de windows
-        /// el certificado con el que realizar las comunicaciones.
-        /// </summary>
-        [XmlElement("CertificateSerial")]
+		[XmlElement("OrganizationId")]
+		public int OrganizationId { get; set; }
+
+		/// <summary>
+		/// Número de serie del certificado a utilizar. Mediante este número
+		/// de serie se selecciona del almacén de certificados de windows
+		/// el certificado con el que realizar las comunicaciones.
+		/// </summary>
+		[XmlElement("CertificateSerial")]
         public string CertificateSerial { get; set; }
 
         /// <summary>

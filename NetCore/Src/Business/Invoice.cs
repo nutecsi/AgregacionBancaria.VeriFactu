@@ -1,4 +1,4 @@
-﻿/*
+/*
     This file is part of the VeriFactu (R) project.
     Copyright (c) 2024-2025 Irene Solutions SL
     Authors: Irene Solutions SL.
@@ -529,6 +529,7 @@ namespace VeriFactu.Business
                 {
                     IDEmisorFactura = SellerID.Trim(),
                     NumSerieFactura = InvoiceID.Trim(),
+
                     FechaExpedicionFactura = XmlParser.GetXmlDate(InvoiceDate)                    
                 }, 
                 NombreRazonEmisor = SellerName,

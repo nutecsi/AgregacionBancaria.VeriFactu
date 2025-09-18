@@ -1,4 +1,4 @@
-﻿/* 
+/* 
     This file is part of the VeriFactu (R) project.
     Copyright (c) 2024-2025 Irene Solutions SL
     Authors: Irene Solutions SL.
@@ -47,11 +47,84 @@ using VeriFactu.Xml.Factu;
 
 namespace VeriFactu.Blockchain
 {
+	using BackendCore.Lib.Libraries.AmbientServices;
+	using Microsoft.Extensions.DependencyInjection;
+	using System;
+	using System.Collections.Generic;
+	using System.Threading.Tasks;
 
-    /// <summary>
-    /// Representa una cadena de bloques.
-    /// </summary>
-    public class Blockchain : SingletonByKey<Blockchain>
+	/// <summary>
+	/// Defines the contract for a blockchain instance
+	/// without persistence concerns.
+	/// </summary>
+	public interface IBlockchain
+	{
+		/// <summary>
+		/// Identificador del vendedor.
+		/// </summary>
+		string SellerID { get; set; }
+
+		/// <summary>
+		/// Identificador del último eslabón de la cadena.
+		/// </summary>
+		ulong CurrentID { get; }
+
+		/// <summary>
+		/// Momento de generación del último eslabón de la cadena.
+		/// </summary>
+		DateTime? CurrentTimeStamp { get; }
+
+		/// <summary>
+		/// Último elemento de la cadena.
+		/// </summary>
+		Registro Current { get; }
+
+		/// <summary>
+		/// Identificador del penúltimo eslabón de la cadena.
+		/// </summary>
+		ulong PreviousID { get; }
+
+		/// <summary>
+		/// Momento de generación del penúltimo eslabón de la cadena.
+		/// </summary>
+		DateTime? PreviousTimeStamp { get; }
+
+		/// <summary>
+		/// Penúltimo elemento de la cadena.
+		/// </summary>
+		Registro Previous { get; }
+
+		/// <summary>
+		/// Añade un elemento a la cadena de bloques.
+		/// </summary>
+		/// <param name="registro">Registro a añadir.</param>
+		void Add(Registro registro);
+
+		/// <summary>
+		/// Añade una lista de elementos a la cadena de bloques.
+		/// </summary>
+		/// <param name="registros">Registros a añadir.</param>
+		void Add(List<Registro> registros);
+
+		/// <summary>
+		/// Elimina el último elemento añadido a la cadena.
+		/// </summary>
+		/// <param name="registro">Registro a eliminar.</param>
+		void Delete(Registro registro);
+
+		/// <summary>
+		/// Representación textual de la instancia.
+		/// </summary>
+		/// <returns>Representación textual de la instancia.</returns>
+		string ToString();
+	}
+
+
+
+	/// <summary>
+	/// Representa una cadena de bloques.
+	/// </summary>
+	public class Blockchain : IBlockchain
     {
 
         #region Variables Privadas Estáticas
@@ -73,17 +146,12 @@ namespace VeriFactu.Blockchain
         #endregion
 
         #region Construtores Estáticos
-
-        /// <summary>
-        /// Constructor estático.
-        /// </summary>
-        static Blockchain()
-        {
-
-            LoadBlockchainsFromDisk();
-            Initialized = true;
-
-        }
+		private void AssertBlockchainInitialized()
+		{
+			if (!Initialized)
+				LoadBlockchain();
+			Initialized = true;
+		}
 
         #endregion
 
@@ -93,37 +161,13 @@ namespace VeriFactu.Blockchain
         /// Constructor.
         /// </summary>
         /// <param name="sellerID">Vendedor al que pertenece la cadena de bloques.</param>
-        public Blockchain(string sellerID) : base(sellerID)
+        public Blockchain()
         {
-
-            BlockchainPath = GetBlockchainPath(Key);
-            SellerID = Key;
-
         }
 
         #endregion
 
         #region Métodos Privados de Instancia
-
-        /// <summary>
-        /// Devuelve la ruta de almacenamiento de la cadena
-        /// de bloques.
-        /// </summary>
-        /// <param name="sellerID">Emisor al que pertenece la
-        /// cadena de bloques a gestionar.</param>
-        /// <returns>Ruta de almacenamiento de la cadena
-        /// de bloques.</returns>
-        private string GetBlockchainPath(string sellerID)
-        {
-
-            var dir = $"{Settings.Current.BlockchainPath}{sellerID}";
-
-            if (!Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
-
-            return $"{dir}{Path.DirectorySeparatorChar}";
-
-        }
 
         /// <summary>
         /// Devuelve un encadenamiento con el último elemento
@@ -133,6 +177,7 @@ namespace VeriFactu.Blockchain
         /// de la cadena.</returns>
         private Encadenamiento GetEncadenamiento()
         {
+			AssertBlockchainInitialized();
 
             if (string.IsNullOrEmpty(Current?.Huella))
                 return new Encadenamiento() { PrimerRegistro = "S" };
@@ -156,9 +201,10 @@ namespace VeriFactu.Blockchain
         /// <param name="registro">Registro a encadenar.</param>
         private string Insert(Registro registro)
         {
+			AssertBlockchainInitialized();
 
-            // Guardo previo
-            PreviousID = CurrentID;
+			// Guardo previo
+			PreviousID = CurrentID;
             Previous = Current;
             PreviousTimeStamp = CurrentTimeStamp;
 
@@ -166,7 +212,7 @@ namespace VeriFactu.Blockchain
             registro.Encadenamiento = GetEncadenamiento();
 
             // Establezco el momento de generación.
-            CurrentTimeStamp = DateTime.Now;
+            CurrentTimeStamp = DateTime.UtcNow;
             registro.FechaHoraHusoGenRegistro = XmlParser.GetXmlDateTimeIso8601(CurrentTimeStamp);            
 
             // Calculo la huella con los datos del encadenamiento ya actualizados
@@ -190,8 +236,9 @@ namespace VeriFactu.Blockchain
         /// <exception cref="InvalidOperationException">Se lanza si no se encuentra el último eslabón.</exception>
         private void Remove() 
         {
+			AssertBlockchainInitialized();
 
-            if (Previous == null && CurrentID > 1)
+			if (Previous == null && CurrentID > 1)
                 throw new InvalidOperationException("No se puede eliminar el último" +
                     " elemento ya que no existe información del elemento previo.");
 
@@ -211,8 +258,9 @@ namespace VeriFactu.Blockchain
         /// <param name="csvLines">Líneas a escribir en el csv de control.</param>
         private void Write(List<string> csvLines = null)
         {
+			AssertBlockchainInitialized();
 
-            WriteVar();
+			WriteVar();
             WriteData(csvLines);
 
         }
@@ -223,8 +271,9 @@ namespace VeriFactu.Blockchain
         /// </summary>
         private void WriteVar()
         {
+			AssertBlockchainInitialized();
 
-            if (CurrentID == 0)
+			if (CurrentID == 0)
             {
 
                 // No hay eslabones
@@ -255,8 +304,9 @@ namespace VeriFactu.Blockchain
         /// <returns>Linea de archivo csv</returns>
         private string GetControFilelLine() 
         {
+			AssertBlockchainInitialized();
 
-            return $"{CurrentID}{_CsvSeparator}" +                              // 0 Id de entrada en la cadena de bloques
+			return $"{CurrentID}{_CsvSeparator}" +                              // 0 Id de entrada en la cadena de bloques
                     $"{CurrentTimeStamp}{_CsvSeparator}" +                      // 1 Marca de tiempo
                     $"{Current.Huella}{_CsvSeparator}" +                        // 2 Huella
                     $"{Current.IDFactura.FechaExpedicion}{_CsvSeparator}" +     // 3 Fecha expedición factura
@@ -275,8 +325,9 @@ namespace VeriFactu.Blockchain
         /// archivo csv de control.</param>
         private void WriteData(List<string> csvLines = null)
         {
+			AssertBlockchainInitialized();
 
-            string line = GetControFilelLine();
+			string line = GetControFilelLine();
 
             if (File.Exists(BlockchainDataPreviousFileName))
                 File.Delete(BlockchainDataPreviousFileName);
@@ -300,9 +351,10 @@ namespace VeriFactu.Blockchain
         /// <exception cref="InvalidOperationException">Se lanza si no se encuentra archivo previo a restaurar.</exception>
         private void RestorePreviousData(string blockchainDataFileName, 
             string blockchainDataPreviousFileName)
-        {            
+        {
+			AssertBlockchainInitialized();
 
-            var isFirstLink = CurrentID == 0; // Se trataba del primer eslabón de la cadena
+			var isFirstLink = CurrentID == 0; // Se trataba del primer eslabón de la cadena
             var isFirstBlockPeriodLink = false; // Se trata del primer eslabón del periodo
 
             if (!File.Exists(blockchainDataPreviousFileName)) 
@@ -355,43 +407,43 @@ namespace VeriFactu.Blockchain
         /// En caso de no existir, se puede utilizar el número DUNS 
         /// o cualquier otro identificador acordado.
         /// </summary>        
-        public string SellerID { get; private set; }
+        public string SellerID { get; set; }
 
         /// <summary>
         /// Identificador del último eslabón de la cadena.
         /// </summary>
-        public ulong CurrentID { get; private set; }
+        public ulong CurrentID { get; protected set; }
 
         /// <summary>
         /// Momento de generación del último eslabón de la cadena.
         /// </summary>
-        public DateTime? CurrentTimeStamp { get; private set; }
+        public DateTime? CurrentTimeStamp { get; protected set; }
 
         /// <summary>
         /// Último elemento de la cadena.
         /// </summary>
-        public Registro Current { get; private set; }
+        public Registro Current { get; protected set; }
 
         /// <summary>
         /// Identificador del penúltimo eslabón de la cadena.
         /// </summary>
-        public ulong PreviousID { get; private set; }
+        public ulong PreviousID { get; protected set; }
 
         /// <summary>
         /// Momento de generación del penúltimo eslabón de la cadena.
         /// </summary>
-        public DateTime? PreviousTimeStamp { get; private set; }
+        public DateTime? PreviousTimeStamp { get; protected set; }
 
         /// <summary>
         /// Penúltimo elemento de la cadena.
         /// </summary>
-        public Registro Previous { get; private set; }
+        public Registro Previous { get; protected set; }
 
         /// <summary>
         /// Path del directorio de archivado de los datos de la
         /// cadena.
         /// </summary>
-        public string BlockchainPath { get; private set; }
+        public string BlockchainPath { get; protected set; }
 
         /// <summary>
         /// Archivo que almacena el valor de las variables en curso
@@ -423,21 +475,23 @@ namespace VeriFactu.Blockchain
         /// <param name="sellerID">Id. del emisor de factura.</param>
         /// <returns>Instancia correspondiente a la cadena de bloques
         /// de un emisor de facturas.</returns>
-        public static Blockchain Get(string sellerID)
+        public static IBlockchain Get(string sellerID)
         {
-
-            return GetInstance(sellerID) as Blockchain;
-
+			var sp = AmbientServices.Current; 
+			var blockchain = sp.GetRequiredService<IBlockchain>();
+			blockchain.SellerID = sellerID;
+			return blockchain;
         }
 
         /// <summary>
         /// Carga todas las cadenas de bloques.
         /// </summary>
         /// <exception cref="InvalidOperationException">Se lanza si BlockchainPath no es un directorio válido.</exception>
-        public static void LoadBlockchainsFromDisk()
+        protected virtual void LoadBlockchain()
         {
+			AssertBlockchainInitialized();
 
-            if (string.IsNullOrEmpty(Settings.Current.BlockchainPath) || !Directory.Exists(Settings.Current.BlockchainPath))
+			if (string.IsNullOrEmpty(Settings.Current.BlockchainPath) || !Directory.Exists(Settings.Current.BlockchainPath))
                 throw new InvalidOperationException($"Revise el archivo de configuración {Settings.FileName}," +
                     $" el valor de BlockchainPath debe ser el de un directorio válido.");
 
@@ -447,7 +501,8 @@ namespace VeriFactu.Blockchain
             {
 
                 var sellerID = Path.GetFileName(dir);
-                var blockchain = new Blockchain(sellerID);
+                var blockchain = new Blockchain();
+				blockchain.SellerID = sellerID;
 
                 if (File.Exists(blockchain.BlockchainVarFileName))
                 {
@@ -492,8 +547,9 @@ namespace VeriFactu.Blockchain
         /// <exception cref="Exception">Si no se puede añadir el eslabón en la cadena.</exception>
         public void Add(Registro registro)
         {
+			AssertBlockchainInitialized();
 
-            Exception addException = null;
+			Exception addException = null;
 
             lock (_Locker)
             {
@@ -502,8 +558,7 @@ namespace VeriFactu.Blockchain
                 {
 
                     Insert(registro);
-                    Write();
-
+                    //Write();
                 }
                 catch (Exception ex) 
                 {
@@ -526,8 +581,9 @@ namespace VeriFactu.Blockchain
         /// <exception cref="Exception">Si no se puede añadir el eslabón en la cadena.</exception>
         public void Add(List<Registro> registros)
         {
+			AssertBlockchainInitialized();
 
-            Exception addException = null;
+			Exception addException = null;
 
             lock (_Locker)
             {
@@ -540,7 +596,7 @@ namespace VeriFactu.Blockchain
                     for(int r = 0; r < registros.Count; r++)
                         csvLines.Add(Insert(registros[r]));
 
-                    Write(csvLines);
+                    //Write(csvLines);
 
                 }
                 catch (Exception ex)
@@ -567,8 +623,9 @@ namespace VeriFactu.Blockchain
         /// </exception>
         public void Delete(Registro registro) 
         {
+			AssertBlockchainInitialized();
 
-            if (registro.Huella != Current.Huella)
+			if (registro.Huella != Current.Huella)
                 throw new InvalidOperationException($"Se ha intentado borrar el registro" +
                     $" {registro.Huella} que no coincide con el último {Current.Huella}");
 
@@ -579,6 +636,7 @@ namespace VeriFactu.Blockchain
 
             Exception restoreException = null;
 
+			/*
             lock (_Locker)
             {
                 
@@ -597,6 +655,7 @@ namespace VeriFactu.Blockchain
                 }
 
             }
+			*/
 
             if (restoreException != null)
                 throw new Exception($"Error al restaurar datos borrando último eslabón de la cadena.", restoreException);

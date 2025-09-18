@@ -1,4 +1,4 @@
-﻿/*
+/*
     This file is part of the VeriFactu (R) project.
     Copyright (c) 2024-2025 Irene Solutions SL
     Authors: Irene Solutions SL.
@@ -60,31 +60,32 @@ namespace VeriFactu.Xml
         /// <para>FormatoNIF(9).</para>
         /// </summary>
         [XmlIgnore()]
-        internal string IDEmisor { get; set; }
+        public string IDEmisor { get; set; }
 
         /// <summary>
         /// <para>Nº Serie+Nº Factura  que identifica a la factura emitida.</para>
         /// <para>Alfanumérico(60).</para>
         /// </summary>
         [XmlIgnore()]
-        internal string NumSerie { get; set; }
+		public string NumSerie { get; set; }
 
         /// <summary>
         /// <para>Fecha de expedición de la factura.</para>
         /// <para>Fecha(dd-mm-yyyy).</para>
         /// </summary>
         [XmlIgnore()]
-        internal string FechaExpedicion { get; set; }
+		public string FechaExpedicion { get; set; }
 
-        #endregion
+		#endregion
 
-        #region Propiedades Públicas de Instancia
+		#region Propiedades Públicas de Instancia
 
-        /// <summary>
-        /// <para>Número de identificación fiscal (NIF) del obligado a expedir la factura.</para>
-        /// <para>FormatoNIF(9).</para>
-        /// </summary>
-        public string IDEmisorFactura
+
+		/// <summary>
+		/// <para>Número de identificación fiscal (NIF) del obligado a expedir la factura.</para>
+		/// <para>FormatoNIF(9).</para>
+		/// </summary>
+		public string IDEmisorFactura
         {
             get
             {
@@ -97,11 +98,12 @@ namespace VeriFactu.Xml
             }
         }
 
-        /// <summary>
-        /// <para>Nº Serie+Nº Factura  que identifica a la factura emitida.</para>
-        /// <para>Alfanumérico(60).</para>
-        /// </summary>
-        public string NumSerieFactura
+
+		/// <summary>
+		/// <para>Nº Serie+Nº Factura  que identifica a la factura emitida.</para>
+		/// <para>Alfanumérico(60).</para>
+		/// </summary>
+		public string NumSerieFactura
         {
             get
             {
