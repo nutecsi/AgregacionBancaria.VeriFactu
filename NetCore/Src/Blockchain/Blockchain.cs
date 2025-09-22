@@ -146,7 +146,7 @@ namespace VeriFactu.Blockchain
         #endregion
 
         #region Construtores Estáticos
-		private void AssertBlockchainInitialized()
+		protected void AssertBlockchainInitialized()
 		{
 			if (!Initialized)
 				LoadBlockchain();
@@ -175,7 +175,7 @@ namespace VeriFactu.Blockchain
         /// </summary>
         /// <returns>Encadenamiento con el último elemento
         /// de la cadena.</returns>
-        private Encadenamiento GetEncadenamiento()
+        protected Encadenamiento GetEncadenamiento()
         {
 			AssertBlockchainInitialized();
 
@@ -199,7 +199,7 @@ namespace VeriFactu.Blockchain
         /// Inserta un eslabón en la cadena.
         /// </summary>
         /// <param name="registro">Registro a encadenar.</param>
-        private string Insert(Registro registro)
+        protected virtual string Insert(Registro registro)
         {
 			AssertBlockchainInitialized();
 
@@ -211,9 +211,10 @@ namespace VeriFactu.Blockchain
             // Actualizo los datos de encadenamiento con el registro anterior
             registro.Encadenamiento = GetEncadenamiento();
 
-            // Establezco el momento de generación.
-            CurrentTimeStamp = DateTime.UtcNow;
-            registro.FechaHoraHusoGenRegistro = XmlParser.GetXmlDateTimeIso8601(CurrentTimeStamp);            
+			// Establezco el momento de generación.
+			DateTime fechHoraUsoGenRegistro = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Europe/Madrid"));
+			CurrentTimeStamp = DateTime.UtcNow;
+            registro.FechaHoraHusoGenRegistro = XmlParser.GetXmlDateTimeIso8601(fechHoraUsoGenRegistro);            
 
             // Calculo la huella con los datos del encadenamiento ya actualizados
             registro.Huella = registro.GetHashOutput();
@@ -302,7 +303,7 @@ namespace VeriFactu.Blockchain
         /// con los datos necesarios.
         /// </summary>
         /// <returns>Linea de archivo csv</returns>
-        private string GetControFilelLine() 
+        protected string GetControFilelLine() 
         {
 			AssertBlockchainInitialized();
 
@@ -395,7 +396,7 @@ namespace VeriFactu.Blockchain
         /// <summary>
         /// Indica si el sistema de cadena de bloques está inicializado.
         /// </summary>
-        public static bool Initialized { get; private set; }
+        public bool Initialized { get; private set; }
 
         #endregion
 

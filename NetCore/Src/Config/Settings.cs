@@ -131,7 +131,7 @@ namespace VeriFactu.Config
 
             Get();
 
-            BlockchainInitialized = Blockchain.Blockchain.Initialized; // Inicia cadena de bloques
+            BlockchainInitialized = true; // Inicia cadena de bloques
             Current.SistemaInformatico.IndicadorMultiplesOT = Seller.GetSellers().Count > 1 ? "S" : "N"; // Valor multiples OT
 
         }
