@@ -1,4 +1,4 @@
-﻿/*
+/*
     This file is part of the VeriFactu (R) project.
     Copyright (c) 2024-2025 Irene Solutions SL
     Authors: Irene Solutions SL.
@@ -300,8 +300,18 @@ namespace VeriFactu.Business.FlowControl
 
         }
 
-        #endregion
+		public Dictionary<string, InvoiceAction> Save(out RespuestaRegFactuSistemaFacturacion x)
+		{
 
-    }
+			var postedInvoiceActions = Post(_InvoiceActions);
+			var aeatResponse = Send(postedInvoiceActions);
+			x = aeatResponse;
+			return ProcessReponse(aeatResponse, postedInvoiceActions);
+
+		}
+
+		#endregion
+
+	}
 
 }
