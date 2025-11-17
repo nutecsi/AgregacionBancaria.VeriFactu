@@ -165,7 +165,7 @@ namespace VeriFactu.Blockchain
 			{
 				if (!m_Blockchains.TryGetValue(sellerID, out var blockchain))
 				{
-					blockchain = ActivatorUtilities.CreateInstance<Blockchain>(m_ServiceProvider);
+					blockchain = ActivatorUtilities.CreateInstance<IBlockchain>(m_ServiceProvider);
 					blockchain.SellerID = sellerID;
 					m_Blockchains[sellerID] = blockchain;
 				}
@@ -543,8 +543,6 @@ namespace VeriFactu.Blockchain
         /// <exception cref="InvalidOperationException">Se lanza si BlockchainPath no es un directorio válido.</exception>
         protected virtual void LoadBlockchain()
         {
-			AssertBlockchainInitialized();
-
 			if (string.IsNullOrEmpty(Settings.Current.BlockchainPath) || !Directory.Exists(Settings.Current.BlockchainPath))
                 throw new InvalidOperationException($"Revise el archivo de configuración {Settings.FileName}," +
                     $" el valor de BlockchainPath debe ser el de un directorio válido.");
