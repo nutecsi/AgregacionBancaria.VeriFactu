@@ -54,6 +54,19 @@ namespace VeriFactu.Blockchain
 	using System.Threading.Tasks;
 
 	/// <summary>
+	/// Factory for creating and managing blockchain instances per seller.
+	/// </summary>
+	public interface IBlockchainFactory
+	{
+		/// <summary>
+		/// Gets or creates a blockchain instance for the specified seller.
+		/// </summary>
+		/// <param name="sellerID">Seller identifier.</param>
+		/// <returns>Blockchain instance for the seller.</returns>
+		IBlockchain Get(string sellerID);
+	}
+
+	/// <summary>
 	/// Defines the contract for a blockchain instance
 	/// without persistence concerns.
 	/// </summary>
@@ -119,7 +132,48 @@ namespace VeriFactu.Blockchain
 		string ToString();
 	}
 
+	/// <summary>
+	/// Factory implementation that manages blockchain instances per seller within a scope.
+	/// </summary>
+	public class BlockchainFactory : IBlockchainFactory
+	{
+		private readonly IServiceProvider m_ServiceProvider;
+		private readonly Dictionary<string, IBlockchain> m_Blockchains = new Dictionary<string, IBlockchain>();
+		private readonly object m_Locker = new object();
 
+		/// <summary>
+		/// Constructor.
+		/// </summary>
+		/// <param name="serviceProvider">Service provider for creating blockchain instances.</param>
+		public BlockchainFactory(IServiceProvider serviceProvider)
+		{
+			m_ServiceProvider = serviceProvider;
+		}
+
+		/// <summary>
+		/// Gets or creates a blockchain instance for the specified seller.
+		/// </summary>
+		/// <param name="sellerID">Seller identifier.</param>
+		/// <returns>Blockchain instance for the seller.</returns>
+		/// <exception cref="ArgumentNullException">If sellerID is null or empty.</exception>
+		public IBlockchain Get(string sellerID)
+		{
+			if (string.IsNullOrEmpty(sellerID))
+				throw new ArgumentNullException(nameof(sellerID));
+
+			lock (m_Locker)
+			{
+				if (!m_Blockchains.TryGetValue(sellerID, out var blockchain))
+				{
+					blockchain = ActivatorUtilities.CreateInstance<Blockchain>(m_ServiceProvider);
+					blockchain.SellerID = sellerID;
+					m_Blockchains[sellerID] = blockchain;
+				}
+
+				return blockchain;
+			}
+		}
+	}
 
 	/// <summary>
 	/// Representa una cadena de bloques.
@@ -479,9 +533,8 @@ namespace VeriFactu.Blockchain
         public static IBlockchain Get(string sellerID)
         {
 			var sp = AmbientServices.Current; 
-			var blockchain = sp.GetRequiredService<IBlockchain>();
-			blockchain.SellerID = sellerID;
-			return blockchain;
+			var factory = sp.GetRequiredService<IBlockchainFactory>();
+			return factory.Get(sellerID);
         }
 
         /// <summary>

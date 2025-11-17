@@ -68,7 +68,7 @@ namespace VeriFactu.Xml.Soap
         #endregion
 
         #region Propiedades Públicas de Instancia
-
+        
         /// <summary>
         /// Registro.
         /// </summary>
