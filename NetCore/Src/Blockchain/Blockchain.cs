@@ -140,6 +140,7 @@ namespace VeriFactu.Blockchain
 		private readonly IServiceProvider m_ServiceProvider;
 		private readonly Dictionary<string, IBlockchain> m_Blockchains = new Dictionary<string, IBlockchain>();
 		private readonly object m_Locker = new object();
+		private Type m_BlockchainType;
 
 		/// <summary>
 		/// Constructor.
@@ -165,7 +166,15 @@ namespace VeriFactu.Blockchain
 			{
 				if (!m_Blockchains.TryGetValue(sellerID, out var blockchain))
 				{
-					blockchain = ActivatorUtilities.CreateInstance<IBlockchain>(m_ServiceProvider);
+					// Lazily resolve the implementation type once
+					if (m_BlockchainType == null)
+					{
+						var tempInstance = m_ServiceProvider.GetRequiredService<IBlockchain>();
+						m_BlockchainType = tempInstance.GetType();
+					}
+
+					// Create a new instance with resolved dependencies
+					blockchain = (IBlockchain)ActivatorUtilities.CreateInstance(m_ServiceProvider, m_BlockchainType);
 					blockchain.SellerID = sellerID;
 					m_Blockchains[sellerID] = blockchain;
 				}
