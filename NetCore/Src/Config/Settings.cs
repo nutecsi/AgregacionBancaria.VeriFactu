@@ -116,46 +116,46 @@ namespace VeriFactu.Config
         /// </summary>
         internal static string DefaultNumberDecimalSeparator = ".";
 
-	/// <summary>
-	/// Nombre del fichero de configuración (contexto ambiente por flujo de ejecución).
-	/// </summary>
-	static readonly AsyncLocal<string> _FileName = new AsyncLocal<string>();
+		/// <summary>
+		/// Nombre del fichero de configuración (contexto ambiente por flujo de ejecución).
+		/// </summary>
+		static readonly AsyncLocal<string> _FileName = new AsyncLocal<string>();
 
-	/// <summary>
-	/// Nombre del fichero de configuración global por defecto.
-	/// </summary>
-	static string _GlobalFileName = "Settings.xml";
+		/// <summary>
+		/// Nombre del fichero de configuración global por defecto.
+		/// </summary>
+		static string _GlobalFileName = "Settings.xml";
 
-	/// <summary>
-	/// Nombre del fichero de configuración actual (usa contexto ambiente si está disponible).
-	/// </summary>
-	internal static string FileName
-	{
-		get
+		/// <summary>
+		/// Nombre del fichero de configuración actual (usa contexto ambiente si está disponible).
+		/// </summary>
+		internal static string FileName
 		{
-			var localValue = _FileName.Value;
-			if (!string.IsNullOrEmpty(localValue))
-				return localValue;
-
-			return _GlobalFileName;
-		}
-		set
-		{
-			if (_Current.Value != null)
+			get
 			{
-				// Hay contexto ambiente, establecer localmente
-				_FileName.Value = value;
+				var localValue = _FileName.Value;
+				if (!string.IsNullOrEmpty(localValue))
+					return localValue;
+
+				return _GlobalFileName;
 			}
-			else
+			set
 			{
-				// No hay contexto ambiente, establecer globalmente con lock
-				lock (_GlobalCurrentLock)
+				if (_Current.Value != null)
 				{
-					_GlobalFileName = value;
+					// Hay contexto ambiente, establecer localmente
+					_FileName.Value = value;
+				}
+				else
+				{
+					// No hay contexto ambiente, establecer globalmente con lock
+					lock (_GlobalCurrentLock)
+					{
+						_GlobalFileName = value;
+					}
 				}
 			}
 		}
-	}
 
         /// <summary>
         /// Indicador de si el sistema de cadena de bloques está
@@ -216,8 +216,6 @@ namespace VeriFactu.Config
 
 		}
 
-		CheckDirectories();
-
 		// Establecer en contexto apropiado con sincronización
 		if (_Current.Value != null)
 		{
@@ -232,6 +230,8 @@ namespace VeriFactu.Config
 				_GlobalCurrent = settings;
 			}
 		}
+
+		CheckDirectories();
 
 		return settings;
 
@@ -420,7 +420,7 @@ namespace VeriFactu.Config
             set 
             { 
 
-                if(Current.BlockchainPath != null && Current.BlockchainPath != value 
+                if(Current != null && Current.BlockchainPath != null && Current.BlockchainPath != value 
                     && Directory.GetDirectories(Current.BlockchainPath).Length > 0)
                     throw new InvalidOperationException($"No se puede cambiar el valor" +
                         $" de 'BlockchainPath' si la carpeta no está vacía.");
