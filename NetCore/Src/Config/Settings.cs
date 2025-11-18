@@ -45,6 +45,7 @@ using System.Reflection;
 #if !LE_461
 using System.Runtime.InteropServices;
 #endif
+using System.Threading;
 using System.Xml.Serialization;
 using VeriFactu.Common;
 using VeriFactu.DataStore;
@@ -62,17 +63,27 @@ namespace VeriFactu.Config
 	public class Settings
 	{
 
-		#region Variables Privadas Estáticas
+	#region Variables Privadas Estáticas
 
-		/// <summary>
-		/// Path separator win="\" and linux ="/".
-		/// </summary>
-		static readonly char _PathSep = System.IO.Path.DirectorySeparatorChar;
+	/// <summary>
+	/// Path separator win="\" and linux ="/".
+	/// </summary>
+	static readonly char _PathSep = System.IO.Path.DirectorySeparatorChar;
 
-		/// <summary>
-		/// Configuración actual.
-		/// </summary>
-		static Settings _Current;
+	/// <summary>
+	/// Configuración actual (contexto ambiente por flujo de ejecución).
+	/// </summary>
+	static readonly AsyncLocal<Settings> _Current = new AsyncLocal<Settings>();
+
+	/// <summary>
+	/// Configuración global por defecto (fallback cuando no hay contexto ambiente).
+	/// </summary>
+	static Settings _GlobalCurrent;
+
+	/// <summary>
+	/// Lock para sincronizar acceso a _GlobalCurrent.
+	/// </summary>
+	static readonly object _GlobalCurrentLock = new object();
 
 	/// <summary>
 	/// Ruta al directorio de configuración.
@@ -105,10 +116,46 @@ namespace VeriFactu.Config
         /// </summary>
         internal static string DefaultNumberDecimalSeparator = ".";
 
-        /// <summary>
-        /// Nombre del fichero de configuración.
-        /// </summary>
-        internal static string FileName = "Settings.xml";
+	/// <summary>
+	/// Nombre del fichero de configuración (contexto ambiente por flujo de ejecución).
+	/// </summary>
+	static readonly AsyncLocal<string> _FileName = new AsyncLocal<string>();
+
+	/// <summary>
+	/// Nombre del fichero de configuración global por defecto.
+	/// </summary>
+	static string _GlobalFileName = "Settings.xml";
+
+	/// <summary>
+	/// Nombre del fichero de configuración actual (usa contexto ambiente si está disponible).
+	/// </summary>
+	internal static string FileName
+	{
+		get
+		{
+			var localValue = _FileName.Value;
+			if (!string.IsNullOrEmpty(localValue))
+				return localValue;
+
+			return _GlobalFileName;
+		}
+		set
+		{
+			if (_Current.Value != null)
+			{
+				// Hay contexto ambiente, establecer localmente
+				_FileName.Value = value;
+			}
+			else
+			{
+				// No hay contexto ambiente, establecer globalmente con lock
+				lock (_GlobalCurrentLock)
+				{
+					_GlobalFileName = value;
+				}
+			}
+		}
+	}
 
         /// <summary>
         /// Indicador de si el sistema de cadena de bloques está
@@ -142,38 +189,53 @@ namespace VeriFactu.Config
 
         #region Métodos Privados Estáticos
 
-        /// <summary>
-        /// Inicia estaticos.
-        /// </summary>
-        /// <returns>La configuración cargada.</returns>
-        internal static Settings Get()
-        {
+	/// <summary>
+	/// Inicia estaticos.
+	/// </summary>
+	/// <returns>La configuración cargada.</returns>
+	internal static Settings Get()
+	{
 
-            _Current = new Settings();
+		var settings = new Settings();
 
-            string FullPath = $"{Path}{_PathSep}" + FileName;
+		string FullPath = $"{Path}{_PathSep}" + FileName;
 
-            XmlSerializer serializer = new XmlSerializer(_Current.GetType());
-            
-            if (File.Exists(FullPath))
-            {
+		XmlSerializer serializer = new XmlSerializer(settings.GetType());
+		
+		if (File.Exists(FullPath))
+		{
 
-                using (StreamReader r = new StreamReader(FullPath))
-                    _Current = serializer.Deserialize(r) as Settings;
+			using (StreamReader r = new StreamReader(FullPath))
+				settings = serializer.Deserialize(r) as Settings;
 
-            }
-            else
-            {
+		}
+		else
+		{
 
-                _Current= GetDefault();
+			settings = GetDefault();
 
-            }
+		}
 
-            CheckDirectories();
+		CheckDirectories();
 
-            return _Current;
+		// Establecer en contexto apropiado con sincronización
+		if (_Current.Value != null)
+		{
+			// Hay contexto ambiente, establecer localmente
+			_Current.Value = settings;
+		}
+		else
+		{
+			// No hay contexto ambiente, establecer globalmente con lock
+			lock (_GlobalCurrentLock)
+			{
+				_GlobalCurrent = settings;
+			}
+		}
 
-        }
+		return settings;
+
+	}
 
         /// <summary>
         /// Devuelve MAC address.
@@ -272,20 +334,38 @@ namespace VeriFactu.Config
 
         #region Propiedades Públicas Estáticas
 
-        /// <summary>
-        /// Configuración en curso.
-        /// </summary>
-        public static Settings Current
-        {
-            get
-            {
-                return _Current;
-            }
-            set
-            {
-                _Current = value;
-            }
-        }
+	/// <summary>
+	/// Configuración en curso. Usa contexto ambiente por flujo de ejecución si está disponible,
+	/// sino usa la configuración global.
+	/// </summary>
+	public static Settings Current
+	{
+		get
+		{
+			// AsyncLocal es thread-safe para lectura
+			var localValue = _Current.Value;
+			if (localValue != null)
+				return localValue;
+
+			// Lectura de _GlobalCurrent sin lock es segura (puede ser stale pero no corrupt)
+			return _GlobalCurrent;
+		}
+		set
+		{
+			// Si hay contexto ambiente, establece el valor local (thread-safe)
+			if (_Current.Value != null)
+			{
+				_Current.Value = value;
+				return;
+			}
+
+			// Si no hay contexto ambiente, establece global con sincronización
+			lock (_GlobalCurrentLock)
+			{
+				_GlobalCurrent = value;
+			}
+		}
+	}
 
         /// <summary>
         /// Ruta al directorio de configuración.
@@ -461,64 +541,128 @@ namespace VeriFactu.Config
 
         #region Métodos Públicos Estáticos
 
-        /// <summary>
-        /// Guarda la configuración en curso actual.
-        /// </summary>
-        public static void Save()
-        {
+	/// <summary>
+	/// Guarda la configuración en curso actual.
+	/// </summary>
+	public static void Save()
+	{
 
-            CheckDirectories();
+		CheckDirectories();
 
-            string FullPath = $"{Path}{_PathSep}" + FileName;
+		string FullPath = $"{Path}{_PathSep}" + FileName;
 
-            XmlSerializer serializer = new XmlSerializer(Current.GetType());
+		// Capturar Current una sola vez para evitar inconsistencias
+		var currentSettings = Current;
 
-            using (StreamWriter w = new StreamWriter(FullPath))
-            {
-                serializer.Serialize(w, Current);
-            }
+		XmlSerializer serializer = new XmlSerializer(currentSettings.GetType());
 
-        }
+		using (StreamWriter w = new StreamWriter(FullPath))
+		{
+			serializer.Serialize(w, currentSettings);
+		}
 
-        /// <summary>
-        /// Aseguro existencia de directorios de trabajo.
-        /// </summary>
-        private static void CheckDirectories()
-        {
-            if (!Directory.Exists(Path))
-                Directory.CreateDirectory(Path);
+	}
 
-            if (!Directory.Exists(_Current.InboxPath))
-                Directory.CreateDirectory(_Current.InboxPath);
+	/// <summary>
+	/// Aseguro existencia de directorios de trabajo.
+	/// </summary>
+	private static void CheckDirectories()
+	{
+		if (!Directory.Exists(Path))
+			Directory.CreateDirectory(Path);
 
-            if (!Directory.Exists(_Current.OutboxPath))
-                Directory.CreateDirectory(_Current.OutboxPath);
+		if (!Directory.Exists(Current.InboxPath))
+			Directory.CreateDirectory(Current.InboxPath);
 
-            if (!Directory.Exists(_Current.BlockchainPath))
-                Directory.CreateDirectory(_Current.BlockchainPath);
+		if (!Directory.Exists(Current.OutboxPath))
+			Directory.CreateDirectory(Current.OutboxPath);
 
-            if (!Directory.Exists(_Current.InvoicePath))
-                Directory.CreateDirectory(_Current.InvoicePath);
+		if (!Directory.Exists(Current.BlockchainPath))
+			Directory.CreateDirectory(Current.BlockchainPath);
 
-            if (!Directory.Exists(_Current.LogPath))
-                Directory.CreateDirectory(_Current.LogPath);
+		if (!Directory.Exists(Current.InvoicePath))
+			Directory.CreateDirectory(Current.InvoicePath);
 
-        }
+		if (!Directory.Exists(Current.LogPath))
+			Directory.CreateDirectory(Current.LogPath);
 
-        /// <summary>
-        /// Esteblece el archivo de configuración con el cual trabajar.
-        /// </summary>
-        /// <param name="fileName">Nombre del archivo de configuración a utilizar.</param>
-        public static void SetConfigFileName(string fileName)
-        {
+	}
 
-            FileName = fileName;
-            Get();
+	/// <summary>
+	/// Establece el archivo de configuración con el cual trabajar.
+	/// </summary>
+	/// <param name="fileName">Nombre del archivo de configuración a utilizar.</param>
+	[Obsolete("Use Push() with a pre-configured Settings instance instead for better thread-safety")]
+	public static void SetConfigFileName(string fileName)
+	{
 
-        }
+		FileName = fileName;
+		Get();
+	}
 
-        #endregion
+	/// <summary>
+	/// Carga settings desde un archivo específico y retorna la instancia.
+	/// Útil para preparar settings antes de hacer Push().
+	/// </summary>
+	/// <param name="fileName">Nombre del archivo de configuración.</param>
+	/// <returns>Settings cargadas desde el archivo.</returns>
+	public static Settings LoadFromFile(string fileName)
+	{
+		var settings = new Settings();
+		string fullPath = $"{Path}{_PathSep}{fileName}";
 
-    }
+		XmlSerializer serializer = new XmlSerializer(settings.GetType());
+		
+		if (File.Exists(fullPath))
+		{
+			using (StreamReader r = new StreamReader(fullPath))
+				settings = serializer.Deserialize(r) as Settings;
+		}
+		else
+		{
+			settings = GetDefault();
+		}
+
+		return settings;
+	}
+
+	/// <summary>
+	/// Crea un nuevo contexto ambiente de Settings para el flujo de ejecución actual.
+	/// Útil para operaciones concurrentes que necesiten diferentes configuraciones.
+	/// </summary>
+	/// <param name="settings">La configuración a usar en el contexto actual.</param>
+	/// <param name="configFileName">Nombre del archivo de configuración para este contexto (opcional).</param>
+	/// <returns>Un IDisposable que restaura el contexto anterior al hacer dispose.</returns>
+	public static IDisposable Push(Settings settings, string configFileName = null)
+	{
+		return new SettingsScope(settings, configFileName);
+	}
+
+	private class SettingsScope : IDisposable
+	{
+		private readonly Settings m_PreviousSettings;
+		private readonly string m_PreviousFileName;
+
+		public SettingsScope(Settings settings, string configFileName)
+		{
+			m_PreviousSettings = _Current.Value;
+			m_PreviousFileName = _FileName.Value;
+
+			_Current.Value = settings;
+			
+			if (!string.IsNullOrEmpty(configFileName))
+				_FileName.Value = configFileName;
+		}
+
+		public void Dispose()
+		{
+			_Current.Value = m_PreviousSettings;
+			_FileName.Value = m_PreviousFileName;
+		}
+	}
+
+	#endregion
+
+}
 
 }
