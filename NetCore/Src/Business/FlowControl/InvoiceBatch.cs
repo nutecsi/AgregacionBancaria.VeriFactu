@@ -108,6 +108,11 @@ namespace VeriFactu.Business.FlowControl
             InvoiceAction first = invoiceActions[0];
             InvoiceAction last = null;
 
+            // Margen de error permitido por la AEAT (240 segundos)
+            const int margenErrorSegundos = 239;
+            DateTime ahoraUtc = DateTime.UtcNow;
+            bool hayIncidencia = false;
+
             for (int i = 0; i < invoiceActions.Count; i++)
             {
 
@@ -118,7 +123,21 @@ namespace VeriFactu.Business.FlowControl
 
                 last = invoiceActions[i];
 
+                // Comprobamos si la factura está fuera de plazo
+                if (!hayIncidencia && !string.IsNullOrEmpty(invoiceActions[i].Registro?.FechaHoraHusoGenRegistro))
+                {
+                    if (DateTimeOffset.TryParse(invoiceActions[i].Registro.FechaHoraHusoGenRegistro, out DateTimeOffset fechaRegistro))
+                    {
+                        // Si la fecha de registro + margen es anterior a ahora (ambas en UTC), está fuera de plazo
+                        if (fechaRegistro.UtcDateTime.AddSeconds(margenErrorSegundos) < ahoraUtc)
+                            hayIncidencia = true;
+                    }
+                }
+
             }
+
+            if (hayIncidencia)
+                (envelope.Body.Registro as RegFactuSistemaFacturacion).Cabecera.RemisionVoluntaria = new RemisionVoluntaria() { Incidencia = "S" };
 
             var xml = new XmlParser().GetBytes(envelope, Namespaces.Items);
 
@@ -128,7 +147,6 @@ namespace VeriFactu.Business.FlowControl
 
             File.WriteAllBytes($"{first.InvoiceEntryPath}{first.InvoiceEntryID}.{last.InvoiceEntryID}.xml", xml);
             File.WriteAllText($"{first.ResponsesPath}{first.InvoiceEntryID}.{last.InvoiceEntryID}.xml", response);
-
 
             var respuesta = (envelopeRespuesta.Body.Registro as RespuestaRegFactuSistemaFacturacion);
 
