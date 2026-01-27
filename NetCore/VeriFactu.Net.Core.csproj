@@ -56,19 +56,8 @@
   </ItemGroup>
 
 
-  <!-- Autodiscover BackendCore.Lib.csproj under the repo root (RepoRoot defined in Directory.Build.props) -->
-  <ItemGroup Condition="'$(RepoRoot)' != ''">
-    <BackendCoreLibCandidates Include="$(RepoRoot)**/BackendCore.Lib.csproj" Exclude="$(RepoRoot)**/bin/**;$(RepoRoot)**/obj/**;$(RepoRoot)**/*.Tests.csproj" />
-  </ItemGroup>
-  
-  <Target Name="ValidateBackendCoreLib" BeforeTargets="ResolveReferences">
-    <Error Condition="'$(RepoRoot)' == ''" Text="RepoRoot not defined. Ensure Directory.Build.props exists at the repo root." />
-    <Error Condition="@(BackendCoreLibCandidates-&gt;Count()) == 0" Text="BackendCore.Lib.csproj not found under $(RepoRoot)." />
-    <Error Condition="@(BackendCoreLibCandidates-&gt;Count()) &gt; 1" Text="Multiple BackendCore.Lib.csproj found: @(BackendCoreLibCandidates)" />
-  </Target>
-  
-  <ItemGroup Condition="@(BackendCoreLibCandidates-&gt;Count()) == 1">
-    <ProjectReference Include="@(BackendCoreLibCandidates)" />
+  <ItemGroup>
+    <ProjectReference Include="$(BackendCoreLibPath)" />
   </ItemGroup>
 
 </Project>
