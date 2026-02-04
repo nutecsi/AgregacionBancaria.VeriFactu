@@ -1,4 +1,4 @@
-﻿/*
+/*
     This file is part of the VeriFactu (R) project.
     Copyright (c) 2024-2025 Irene Solutions SL
     Authors: Irene Solutions SL.
@@ -128,9 +128,9 @@ namespace VeriFactu.Business
             var errors = new List<string>();
 
             // Comprobamos que la factura existe
-            if (!File.Exists(base.InvoiceFilePath))
-                errors.Add($"No existe una entrada con SellerID: {Invoice.SellerID}" +
-                    $" en el año {Invoice.InvoiceDate.Year} con el número {Invoice.InvoiceID}.");
+            // if (!File.Exists(base.InvoiceFilePath))
+            //     errors.Add($"No existe una entrada con SellerID: {Invoice.SellerID}" +
+            //         $" en el año {Invoice.InvoiceDate.Year} con el número {Invoice.InvoiceID}.");
 
             if (string.IsNullOrEmpty(Invoice.SellerName))
                 errors.Add($"Es necesario que la propiedad Invoice.SellerName tenga un valor.");
