@@ -350,6 +350,19 @@ namespace VeriFactu.Config
 			// Lectura de _GlobalCurrent sin lock es segura (puede ser stale pero no corrupt)
 			return _GlobalCurrent;
 		}
+		// AVISO — NO uses este setter desde código de servidor. Usa Settings.Push, que es por flujo
+		// y anidable.
+		//
+		// La condición de abajo está al revés de lo que uno espera: sólo escribe en el AsyncLocal si
+		// YA hay contexto ambiente, así que la PRIMERA asignación de cualquier flujo cae en
+		// _GlobalCurrent, que es de proceso. En un servidor multitenant eso significa fijar el
+		// certificado X.509 y su contraseña de un tenant para todos los demás — y Settings.Current
+		// .OrganizationId alimenta además SQL crudo que no pasa por los query filters.
+		//
+		// Se mantiene tal cual a propósito: el único llamante es la capa COM x64
+		// (Verifactu.Com.x64/Src/Com/Interop/VfSettings.cs:361), monotenant de escritorio, que sí
+		// depende de que la asignación sea global. Invertirlo la rompería. En servidor no hay ni una
+		// sola asignación, y así debe seguir.
 		set
 		{
 			// Si hay contexto ambiente, establece el valor local (thread-safe)
