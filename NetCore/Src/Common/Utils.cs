@@ -56,12 +56,15 @@ namespace VeriFactu.Common
         #region Variables Privadas Estáticas
 
         /// <summary>
-        /// Algoritmos de digest disponibles.
+        /// Algoritmos de digest disponibles. Cada cálculo crea su propia
+        /// instancia: un HashAlgorithm no admite llamadas simultáneas y,
+        /// compartido entre hilos, además de lanzar puede devolver en silencio
+        /// la huella de datos mezclados de dos registros.
         /// </summary>
-        static readonly Dictionary<TipoHuella, HashAlgorithm> _HashAlgorithms = new Dictionary<TipoHuella, HashAlgorithm>()
+        static readonly Dictionary<TipoHuella, Func<HashAlgorithm>> _HashAlgorithms = new Dictionary<TipoHuella, Func<HashAlgorithm>>()
         {
 
-            {TipoHuella.Sha256, new SHA256Managed() }
+            {TipoHuella.Sha256, () => SHA256.Create() }
 
         };
 
@@ -76,9 +79,9 @@ namespace VeriFactu.Common
         };
 
         /// <summary>
-        /// Algoritmo de hash.
+        /// Crea una instancia nueva del algoritmo de hash configurado.
         /// </summary>
-        internal static HashAlgorithm HashAlgorithm { get; private set; }
+        static Func<HashAlgorithm> _CreateHashAlgorithm;
 
         /// <summary>
         /// Encoding del texto de entrada para el hash de hash.
@@ -108,7 +111,7 @@ namespace VeriFactu.Common
                 throw new ArgumentException($"El valor de la variable de configuración 'VeriFactuHashInputEncoding'" +
                     $" no puede ser '{Settings.Current.VeriFactuHashInputEncoding}'.");
 
-            HashAlgorithm = _HashAlgorithms[Settings.Current.VeriFactuHashAlgorithm];
+            _CreateHashAlgorithm = _HashAlgorithms[Settings.Current.VeriFactuHashAlgorithm];
             Encoding = _Encodings[Settings.Current.VeriFactuHashInputEncoding];
 
             Logger = new Logger();
@@ -118,6 +121,20 @@ namespace VeriFactu.Common
         #endregion
 
         #region Métodos Privados Estáticos
+
+        /// <summary>
+        /// Calcula el hash de la entrada con el algoritmo configurado.
+        /// Es seguro llamarlo desde varios hilos a la vez.
+        /// </summary>
+        /// <param name="input">Bytes de entrada.</param>
+        /// <returns>Hash de la entrada.</returns>
+        internal static byte[] ComputeHash(byte[] input)
+        {
+
+            using (var hashAlgorithm = _CreateHashAlgorithm())
+                return hashAlgorithm.ComputeHash(input);
+
+        }
 
         /// <summary>
         /// Codifica un texto de entrada en una cadena de bytes

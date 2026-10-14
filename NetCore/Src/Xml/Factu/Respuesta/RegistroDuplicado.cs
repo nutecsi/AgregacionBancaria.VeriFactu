@@ -64,6 +64,18 @@ namespace VeriFactu.Xml.Factu.Respuesta
         [XmlElement(Namespace = Namespaces.NamespaceSF)]
         public string EstadoRegistroDuplicado { get; set; }
 
+        /// <summary>
+        /// Código del error del registro duplicado almacenado, en su caso.
+        /// </summary>
+        [XmlElement(Namespace = Namespaces.NamespaceSF)]
+        public string CodigoErrorRegistro { get; set; }
+
+        /// <summary>
+        /// Descripción del error del registro duplicado almacenado, en su caso.
+        /// </summary>
+        [XmlElement(Namespace = Namespaces.NamespaceSF)]
+        public string DescripcionErrorRegistro { get; set; }
+
         #endregion
 
         #region Métodos Públicos de Instancia

@@ -87,6 +87,12 @@ namespace VeriFactu.Xml.Factu.Respuesta
         /// </summary>
         public string DescripcionErrorRegistro { get; set; }
 
+        /// <summary>
+        /// Solo si el registro se rechaza por duplicado: la petición y el estado
+        /// del registro que la AEAT ya tenía (RegistroDuplicadoType).
+        /// </summary>
+        public RegistroDuplicado RegistroDuplicado { get; set; }
+
         #endregion
 
         #region Métodos Públicos de Instancia
