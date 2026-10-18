@@ -66,6 +66,11 @@ namespace VeriFactu.Business.FlowControl
         /// </summary>
         List<InvoiceAction> _InvoiceActions;
 
+        /// <summary>
+        /// Si los registros ya están en la cadena de bloques (<see cref="Post()"/>).
+        /// </summary>
+        bool _Posted;
+
         #endregion
 
         #region Construtores de Instancia
@@ -294,13 +299,29 @@ namespace VeriFactu.Business.FlowControl
             if (invoiceEntry.Posted)
                 throw new ArgumentException($"No se permite la adición de entradas de factura ya contabilizadas.");
 
-            if (invoiceEntry.Posted)
-                throw new ArgumentException($"No se permite la adición de entradas de factura ya contabilizadas.");
+            if (_Posted)
+                throw new InvalidOperationException($"No se permite la adición a un lote ya contabilizado.");
 
             if (invoiceEntry.GetBusErrors().Count > 0)
                 throw new ArgumentException($"No se puede añadir una entrada de factura con errores en validación: {string.Join("\n", invoiceEntry.GetBusErrors())}");
 
             _InvoiceActions.Add(invoiceEntry);
+
+        }
+
+        /// <summary>
+        /// Contabiliza el lote en la cadena de bloques sin enviarlo: lo que la
+        /// cadena rechace aquí no ha salido. <see cref="Save()"/> envía después
+        /// lo contabilizado sin volver a contabilizarlo.
+        /// </summary>
+        public void Post()
+        {
+
+            if (_Posted)
+                return;
+
+            Post(_InvoiceActions);
+            _Posted = true;
 
         }
 
@@ -312,7 +333,8 @@ namespace VeriFactu.Business.FlowControl
         public Dictionary<string, InvoiceAction> Save()
         {
 
-            var postedInvoiceActions = Post(_InvoiceActions);
+            Post();
+            var postedInvoiceActions = _InvoiceActions;
             var aeatResponse = Send(postedInvoiceActions);
             return ProcessReponse(aeatResponse, postedInvoiceActions);
 
@@ -321,7 +343,8 @@ namespace VeriFactu.Business.FlowControl
 		public Dictionary<string, InvoiceAction> Save(out RespuestaRegFactuSistemaFacturacion x)
 		{
 
-			var postedInvoiceActions = Post(_InvoiceActions);
+			Post();
+			var postedInvoiceActions = _InvoiceActions;
 			var aeatResponse = Send(postedInvoiceActions);
 			x = aeatResponse;
 			return ProcessReponse(aeatResponse, postedInvoiceActions);
