@@ -518,9 +518,9 @@ namespace VeriFactu.Business
 
             CalculateTotals();
 
-            // Máximo dos decimales
-            var totalTaxAmount = Math.Round(TotalTaxOutput + TotalTaxOutputSurcharge, 2);
-            var totalAmount = Math.Round(TotalAmount, 2);
+            // Máximo dos decimales, con el redondeo comercial de la factura (medio céntimo se aleja de cero)
+            var totalTaxAmount = Math.Round(TotalTaxOutput + TotalTaxOutputSurcharge, 2, MidpointRounding.AwayFromZero);
+            var totalAmount = Math.Round(TotalAmount, 2, MidpointRounding.AwayFromZero);
 
             var registroAlta = new RegistroAlta()
             {
