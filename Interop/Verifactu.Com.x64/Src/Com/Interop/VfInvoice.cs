@@ -42,6 +42,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using VeriFactu.Business.Validation.NIF;
 using VeriFactu.Xml;
 using VeriFactu.Xml.Factu.Alta;
@@ -158,7 +159,7 @@ namespace Verifactu
         /// </summary>
         /// <param name="operationDate">Fecha operación.</param>
         [DispId(1)]
-        void SeOperationDate(DateTime operationDate);
+        void SetOperationDate(DateTime operationDate);
 
         /// <summary>
         /// Obtiene el registro de alta para verifactu.
@@ -176,6 +177,18 @@ namespace Verifactu
         void SetSubstitution(IVfTaxItem taxItem);
 
         /// <summary>
+        /// Establece el identificador que especifica si la factura ha sido
+        /// emitida por un tercero o por el destinatario. L6.
+        /// </summary>
+        /// <param name="thirdPartyType">
+        /// <para> Tipo de tercero emisor:</para>
+        /// <para> 'D': Destinatario.</para>
+        /// <para> 'T': Tercero.</para>
+        /// </param>
+        [DispId(4)]
+        void SetThirdPartyIssuer(string thirdPartyType);
+
+        /// <summary>
         /// Obtiene el registro de alta para verifactu.
         /// </summary>
         /// <returns>Registro de alta para verifactu</returns>
@@ -189,6 +202,14 @@ namespace Verifactu
         /// <returns>Bitmap con la url de validación
         /// codificada en un código QR.</returns>
         void GetValidateQr(string path);
+
+        /// <summary>
+        /// Obtiene un bitmap con la url de validación
+        /// codificada en un código QR.
+        /// </summary>
+        /// <returns>Bitmap con la url de validación
+        /// codificada en un código QR.</returns>
+        byte[] GetValidateQrBytes();
 
         /// <summary>
         /// Devuelve la url para la validación del documento.
@@ -266,6 +287,12 @@ namespace Verifactu
         /// Fecha operación.
         /// </summary>        
         DateTime? _OperationDate;
+
+        /// <summary>
+        /// Identificador que especifica si la factura ha sido
+        /// emitida por un tercero o por el destinatario. L6.
+        /// </summary>
+        string _ThirdPartyIssuer;
 
         /// <summary>
         /// Objeto factura generado con los datos.
@@ -353,14 +380,29 @@ namespace Verifactu
 
             result.BuyerIDType = (VeriFactu.Xml.Factu.IDType)buyerIDType;
 
+            if(!string.IsNullOrEmpty(BuyerCountryID))
+                result.BuyerCountryID = BuyerCountryID;
+
             result.TaxItems = _TaxItems;
             result.CalculateTotals();
             result.RectificationItems = _RectificationItems;
 
             if (_TaxItemSubstitution != null)
+            {
+
                 if (string.IsNullOrEmpty(InvoiceType) || InvoiceType[0] != 'R')
                     throw new ArgumentException("Para poder establecer la sustitución de una factura, " +
                         "el tipo de factura debe ser rectificativa.");
+
+                // Los importes rectificados tienen que viajar aquí, en el objeto de negocio:
+                // GetRegistroAlta() ya construye el bloque ImporteRectificacion a partir de
+                // ellos. Si se establecen más tarde (en Send(), después de construir el
+                // InvoiceEntry) el constructor de InvoiceEntry ya ha validado y lanza.
+                result.RectificationTaxBase = _TaxItemSubstitution.TaxBase;
+                result.RectificationTaxAmount = _TaxItemSubstitution.TaxAmount;
+                result.RectificationTaxAmountSurcharge = _TaxItemSubstitution.TaxAmountSurcharge;
+
+            }
 
             return result;
 
@@ -509,10 +551,34 @@ namespace Verifactu
         /// de que se necesaria.
         /// </summary>
         /// <param name="operationDate">Fecha operación.</param>
-        public void SeOperationDate(DateTime operationDate)
+        public void SetOperationDate(DateTime operationDate)
         {
 
             _OperationDate = operationDate;
+
+        }
+
+        /// <summary>
+        /// Establece el identificador que especifica si la factura ha sido
+        /// emitida por un tercero o por el destinatario. L6.
+        /// </summary>
+        /// <param name="thirdPartyType">
+        /// <para> Tipo de tercero emisor:</para>
+        /// <para> 'D': Destinatario.</para>
+        /// <para> 'T': Tercero.</para>
+        /// </param>
+        public void SetThirdPartyIssuer(string thirdPartyType)
+        {
+
+            if (!Regex.IsMatch(thirdPartyType, @"^[DT]{1}$"))
+                throw new ArgumentException($"El parámetro thirdPartyType sólo admite los valores" +
+                    $" 'D' para destinatario o 'T' para resto de terceros.");
+
+            if (thirdPartyType == "T")
+                throw new NotImplementedException($"Únicamente está soportada la modalidad de autofactura 'D'." +
+                    $" Pendiente de implementar la opción 'T'.");
+
+            _ThirdPartyIssuer = thirdPartyType;
 
         }
 
@@ -550,6 +616,20 @@ namespace Verifactu
         public void GetValidateQr(string path)
         {
 
+            var bmQr = GetValidateQrBytes();
+            File.WriteAllBytes(path, bmQr);
+
+        }
+
+        /// <summary>
+        /// Obtiene un bitmap con la url de validación
+        /// codificada en un código QR.
+        /// </summary>
+        /// <returns>Bitmap con la url de validación
+        /// codificada en un código QR.</returns>
+        public byte[] GetValidateQrBytes()
+        {
+
             _Invoice = GetInvoice();
 
             // Obtenemos una instancia de la clase RegistroAlta a partir de
@@ -559,9 +639,10 @@ namespace Verifactu
             // Obtenemos la imágen del QR
             var bmQr = registro.GetValidateQr();
 
-            File.WriteAllBytes(path, bmQr);
+            return bmQr;
 
         }
+
 
         /// <summary>
         /// Devuelve la url para la validación del documento.
@@ -571,8 +652,12 @@ namespace Verifactu
         {
 
             _Invoice = GetInvoice();
-            var entry = new VeriFactu.Business.InvoiceEntry(_Invoice);
-            return entry.Registro.GetUrlValidate();
+
+            // Obtenemos una instancia de la clase RegistroAlta a partir de
+            // la instancia del objeto de negocio Invoice
+            var registro = _Invoice.GetRegistroAlta();
+
+            return registro.GetUrlValidate();
 
         }
 
@@ -711,6 +796,16 @@ namespace Verifactu
 
             }
 
+            if (_ThirdPartyIssuer != null)
+            {
+
+                var registroAlta = entry.Registro as RegistroAlta;
+
+                registroAlta.EmitidaPorTerceroODestinatario = _ThirdPartyIssuer == "D" ? EmitidaPorTerceroODestinatario.D : EmitidaPorTerceroODestinatario.T;
+                registroAlta.EmitidaPorTerceroODestinatarioSpecified = true;
+
+            }
+
             try
             {
 
@@ -730,6 +825,7 @@ namespace Verifactu
             {
 
                 result.CSV = entry.CSV;
+                result.Response = entry.Response;
                 result.ResultMessage = "OK";
 
             }
@@ -737,6 +833,7 @@ namespace Verifactu
             {
 
                 result.ResultCode = entry.ErrorCode;
+                result.Response = entry.Response;
                 result.ResultMessage = entry.ErrorDescription;
 
             }
@@ -793,6 +890,7 @@ namespace Verifactu
             {
 
                 result.CSV = cancellation.CSV;
+                result.Response = cancellation.Response;
                 result.ResultMessage = "OK";
 
             }
@@ -800,6 +898,7 @@ namespace Verifactu
             {
 
                 result.ResultCode = cancellation.ErrorCode;
+                result.Response = cancellation.Response;
                 result.ResultMessage = cancellation.ErrorDescription;
 
             }

@@ -39,7 +39,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Text.RegularExpressions;
 using VeriFactu.Xml.Factu;
 using VeriFactu.Xml.Factu.Anulacion;
 using VeriFactu.Xml.Soap;
@@ -70,6 +69,11 @@ namespace VeriFactu.Business.Validation.Validators.Anulacion
         /// </summary>
         protected DateTime _FechaExpedicion;
 
+        /// <summary>
+        /// Indica si la fecha de expedición es válida.
+        /// </summary>
+        protected bool _FechaExpedicionValida;
+
         #endregion
 
         #region Construtores de Instancia
@@ -88,11 +92,7 @@ namespace VeriFactu.Business.Validation.Validators.Anulacion
 
             var fechaExpedicion = _RegistroAnulacion?.IDFacturaAnulada?.FechaExpedicion;
 
-            if (string.IsNullOrEmpty(fechaExpedicion) && !Regex.IsMatch(fechaExpedicion, @"\d{2}-\d{2}-\d{4}"))
-                throw new ArgumentException($"Error en el bloque RegistroAlta ({_RegistroAnulacion}):" +
-                $" La propiedad IDFactura.FechaExpedicion tiene que tener un valor con formato dd-mm-yyyy.");
-
-            _FechaExpedicion = FromXmlDate(fechaExpedicion);
+            _FechaExpedicionValida = TryFromXmlDate(fechaExpedicion, out _FechaExpedicion);
 
         }
 
@@ -109,11 +109,16 @@ namespace VeriFactu.Business.Validation.Validators.Anulacion
 
             var result = new List<string>();
 
-            // 1. GeneradoPor
+            if (!_FechaExpedicionValida)
+                result.Add($"Error en el bloque RegistroAnulacion ({_RegistroAnulacion}):" +
+                    $" La propiedad IDFactura.FechaExpedicion tiene que tener" +
+                    $" un valor de fecha válido con formato dd-MM-yyyy.");
+
+            // 2. GeneradoPor 
             result.AddRange(new ValidatorRegistroAnulacionGeneradoPor(_Envelope, _RegistroAnulacion).GetErrors());
-            // 2. Agrupación Generador
+            // 3. Agrupación Generador
             result.AddRange(new ValidatorRegistroAnulacionGenerador(_Envelope, _RegistroAnulacion).GetErrors());
-            // 3. Huella (del registro anterior)
+            // 4. Huella (del registro anterior)
             result.AddRange(new ValidatorRegistroAnulacionHuella(_Envelope, _RegistroAnulacion).GetErrors());
 
             // Validaciones de textos

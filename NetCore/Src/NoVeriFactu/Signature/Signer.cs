@@ -49,6 +49,7 @@ using VeriFactu.NoVeriFactu.Signature.Xades;
 using VeriFactu.NoVeriFactu.Signature.Xades.Props;
 using VeriFactu.Xml;
 using VeriFactu.Xml.Factu;
+using VeriFactu.Xml.Factu.Evento;
 
 namespace VeriFactu.NoVeriFactu.Signature
 {
@@ -75,7 +76,7 @@ namespace VeriFactu.NoVeriFactu.Signature
         /// <summary>
         /// Información de la clave del certificado para la firma.
         /// </summary>
-        private RSACryptoServiceProvider SigningKey { get; set; }
+        private AsymmetricAlgorithm SigningKey { get; set; }
 
         /// <summary>
         /// Objeto KeyInfo de la firma.
@@ -95,7 +96,7 @@ namespace VeriFactu.NoVeriFactu.Signature
 
             Certificate = certificate;
             SigningKey = GetCertificateKey(Certificate);
-            KeyInfo = GetKeyInfo(Certificate, SigningKey);
+            KeyInfo = GetKeyInfo(Certificate);
 
         }
 
@@ -145,16 +146,23 @@ namespace VeriFactu.NoVeriFactu.Signature
         /// </summary>
         /// <param name="certificate">Certificado del que obtener la clave.</param>
         /// <returns>Clave válida para firma SA256.</returns>
-        private RSACryptoServiceProvider GetCertificateKey(X509Certificate2 certificate)
+        private AsymmetricAlgorithm GetCertificateKey(X509Certificate2 certificate)
         {
 
-            // Proveedor para SA256
-            var exportedKeyMaterial = certificate.PrivateKey.ToXmlString(true); //Include Private Parameters
-            var key = new RSACryptoServiceProvider(new CspParameters(PROV_RSA_AES));
-            key.PersistKeyInCsp = false;
-            key.FromXmlString(exportedKeyMaterial);
-            return key;
+#if LE_461
 
+            RSA src = RSACertificateExtensions.GetRSAPrivateKey(certificate);
+            if (src is null) throw new CryptographicException("El certificado no contiene una clave RSA privada.");
+            var p = src.ExportParameters(includePrivateParameters: true);
+            var clone = new RSACng();
+            clone.ImportParameters(p);
+
+            return clone;
+
+#else
+            return certificate.GetRSAPrivateKey();
+#endif
+            
         }
 
         /// <summary>
@@ -162,14 +170,13 @@ namespace VeriFactu.NoVeriFactu.Signature
         /// para el certificado de entrada.
         /// </summary>
         /// <param name="certificate">Certificado.</param>
-        /// <param name="key">Clave del certificado.</param>
         /// <returns>KeyInfo de la firma.</returns>
-        private KeyInfo GetKeyInfo(X509Certificate2 certificate, RSACryptoServiceProvider key)
+        private KeyInfo GetKeyInfo(X509Certificate2 certificate)
         {
 
             KeyInfo keyInfo = new KeyInfo();
             keyInfo.AddClause(new KeyInfoX509Data(certificate, X509IncludeOption.WholeChain)); // Añade elemento KeyInfo.X509Data.RSAKeyValue.X509Certificate
-            keyInfo.AddClause(new RSAKeyValue(key));  // Añade elemento KeyInfo.KeyValue.RSAKeyValue
+            keyInfo.AddClause(new RSAKeyValue(certificate.GetRSAPublicKey()));  // Añade elemento KeyInfo.KeyValue.RSAKeyValue
 
             return keyInfo;
 
@@ -220,15 +227,20 @@ namespace VeriFactu.NoVeriFactu.Signature
         /// </summary>
         /// <param name="xmlDocument">Documento xml a firmar.</param>
         /// <param name="name">Nombre elemento.</param>
+        /// <param name="prefix">Prefijo espacio de nombres.</param>
+        /// <param name="ns">Espacio de nombres.</param>
+        /// <param name="signatureParentName"> Parámetro opcional con el nombre
+        /// del elemento donde debe insertarse la firma.Si no se facilita incluirá
+        /// Signature como hijo del elemento raíz</param>
         /// <returns>Datos binarios xml firmado.</returns>
-        private byte[] Sign(XmlDocument xmlDocument, string name = "RegistroAlta")
+        private byte[] Sign(XmlDocument xmlDocument, string name, string prefix, string ns, string signatureParentName = null)
         {
 
             xmlDocument.PreserveWhitespace = true;
 
             var signedXml = GetVerifactuSignedXml(xmlDocument);
 
-            var rootTmp = new RootTmp(xmlDocument, name);
+            var rootTmp = new RootTmp(xmlDocument, name, prefix, ns);
 
             rootTmp.SignatureTmp.Object.QualifyingProperties.SignatureId = signedXml.SignatureId;
             rootTmp.SignatureTmp.Object.QualifyingProperties.SignedProperties.SignatureId = signedXml.SignatureId;
@@ -252,7 +264,25 @@ namespace VeriFactu.NoVeriFactu.Signature
                     elem.Prefix = "ds";
 
             // Append the element to the XML document.
-            xmlDocument.DocumentElement.AppendChild(xmlDocument.ImportNode(xmlDigitalSignature, true));
+
+            XmlNode signatureParent = xmlDocument.DocumentElement;
+
+            if (!string.IsNullOrEmpty(signatureParentName))
+            {
+
+                var nodes = xmlDocument.GetElementsByTagName(
+                    signatureParentName,
+                    ns);
+
+                if (nodes.Count != 1)
+                    throw new InvalidOperationException(
+                        $"No se ha encontrado un único elemento '{signatureParentName}'.");
+
+                signatureParent = nodes[0];
+
+            }
+
+            signatureParent.AppendChild(xmlDocument.ImportNode(xmlDigitalSignature, true));
 
             if (xmlDocument.FirstChild is XmlDeclaration)
                 xmlDocument.RemoveChild(xmlDocument.FirstChild);
@@ -274,7 +304,7 @@ namespace VeriFactu.NoVeriFactu.Signature
 
         }
 
-        #endregion
+#endregion
 
         #region Propiedades Públicas de Instancia
 
@@ -309,7 +339,31 @@ namespace VeriFactu.NoVeriFactu.Signature
             XmlDocument xmlDocument = new XmlDocument();
             xmlDocument.LoadXml(System.Text.Encoding.UTF8.GetString(xml));            
 
-            return Sign(xmlDocument, name);
+            return Sign(xmlDocument, name, "sum1", Namespaces.NamespaceSF);
+
+        }
+
+        /// <summary>
+        /// Devuelve los datos binarios de una cadena con el documentos xml de
+        /// entrada firmado.
+        /// </summary>
+        /// <param name="registro">Registro a firmar.</param>
+        /// <returns>XML firmado.</returns>
+        public byte[] Sign(RegistroEvento registro)
+        {
+
+            var nms = new Dictionary<string, string>()
+            {
+                { "sf", Namespaces.NamespaceSf },
+                { "ds", Namespaces.NamespaceDs }
+            };
+
+            var xml = new XmlParser().GetBytes(registro, nms);
+
+            XmlDocument xmlDocument = new XmlDocument();
+            xmlDocument.LoadXml(System.Text.Encoding.UTF8.GetString(xml));
+
+            return Sign(xmlDocument, "RegistroEvento", "sf", Namespaces.NamespaceSf, "Evento");
 
         }
 

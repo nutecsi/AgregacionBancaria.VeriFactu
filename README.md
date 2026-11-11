@@ -7,7 +7,7 @@
 ## :receipt: ¡Automatiza el envío de facturas con la AEAT de forma fácil y eficiente utilizando VeriFactu!
 <br>
 
-La finalidad de esta biblioteca es la generación, conservación y envío de registros; relacionados con la emisión de facturas a la AEAT mediante un sistema VERI*FACTU ( :nerd_face: [Declaración responsable del software](https://github.com/mdiago/VeriFactu/blob/main/NetFramework/Doc/Legal/Declaracion%20Responsable%20v1.0.48-release.pdf)).
+La finalidad de esta biblioteca es la generación, conservación y envío de registros; relacionados con la emisión de facturas a la AEAT mediante un sistema VERI*FACTU ( :nerd_face: [Declaración responsable del software](https://github.com/mdiago/VeriFactu/blob/main/NetFramework/Doc/Legal/Declaracion%20Responsable%20v1.0.69-release.pdf)).
 
 🚀 **Si esta librería te resulta útil, ayúdanos a seguir creciendo marcando ⭐ el repositorio en GitHub**. ¡Cada estrella nos motiva a seguir mejorando!
 
@@ -32,16 +32,25 @@ Para cualquier duda o consulta, puedes escribirnos a **info@irenesolutions.com**
 
 [Irene Solutions](http://www.irenesolutions.com)
 
+## 🙏 Agradecimientos
+
+Aunque VeriFactu es un proyecto desarrollado principalmente desde la parte técnica, su evolución no habría sido posible sin el enfoque práctico y la experiencia del equipo de Wefinz.
+
+Quiero agradecer especialmente a mis compañeros de [Wefinz](https://www.wefinz.com/asesoria/) su asesoramiento continuo en materia mercantil y contable, así como las aportaciones compartidas desde el día a día de la asesoría con empresas y autónomos.
+
+Poder contrastar el desarrollo técnico con la realidad de la gestión contable y fiscal ha sido clave para diseñar una librería más útil, práctica y alineada con las necesidades reales de despachos profesionales, asesorías y software de gestión.
+
+Gracias por compartir conocimiento, criterio y experiencia en cada etapa del proyecto.
+
 ## Quickstart
 
 ### Instalar el paquete con el administrador de paquetes NuGet
 
-![image](https://github.com/user-attachments/assets/d539b788-b49e-4969-8061-f6f021986200)
-
+<img width="875" height="186" alt="image" src="https://github.com/user-attachments/assets/cf5cd849-87ba-4bfb-b8de-291bb411c6f8" />
 
 ### Instalar el paquete con dotnet CLI
 
-`dotnet add package Verifactu`
+`dotnet add package VeriFactu`
 
 <br>
 <br>

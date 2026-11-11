@@ -90,6 +90,13 @@ namespace VeriFactu.Xml.Factu.Consulta.Respuesta
         [XmlElement(Namespace = Namespaces.NamespaceTikLRRC)]
         public RegistroRespuestaConsultaFactuSistemaFacturacion[] RegistroRespuestaConsultaFactuSistemaFacturacion { get; set; }
 
+        /// <summary>
+        /// Datos del a incluir en una consulta paginada
+        /// en caso de más de 10.000 registros.
+        /// </summary>
+        [XmlElement(Namespace = Namespaces.NamespaceTikLRRC)]
+        public ClavePaginacion ClavePaginacion { get; set; }
+
         #endregion
 
         #region Métodos Públicos de Instancia

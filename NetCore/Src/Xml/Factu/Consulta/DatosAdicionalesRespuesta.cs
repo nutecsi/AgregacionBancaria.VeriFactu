@@ -37,8 +37,6 @@
     address: info@irenesolutions.com
  */
 
-using System.Xml.Serialization;
-
 namespace VeriFactu.Xml.Factu.Consulta
 {
 
@@ -58,7 +56,6 @@ namespace VeriFactu.Xml.Factu.Consulta
         /// <para> Alfanumérico(1) Valores posibles: “S” o “N”</para>
         /// </summary>
 
-        [XmlElement(Namespace = Namespaces.NamespaceSF)]
         public string MostrarNombreRazonEmisor { get; set; }
 
         /// <summary>
@@ -69,7 +66,6 @@ namespace VeriFactu.Xml.Factu.Consulta
         /// debe ser 'N' o no estar cumplimentado.</para>
         /// <para> Alfanumérico(1) Valores posibles: “S” o “N”</para>
         /// </summary>
-        [XmlElement(Namespace = Namespaces.NamespaceSF)]
         public string MostrarSistemaInformatico { get; set; }
 
         #endregion

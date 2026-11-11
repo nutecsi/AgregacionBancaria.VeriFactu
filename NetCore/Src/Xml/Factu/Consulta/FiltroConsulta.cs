@@ -57,10 +57,17 @@ namespace VeriFactu.Xml.Factu.Consulta
         public PeriodoImputacion PeriodoImputacion { get; set; }
 
         /// <summary>
+        /// <para>Nº Serie+Nº Factura  que identifica a la factura emitida.</para>
+        /// <para>Alfanumérico(60).</para>
+        /// </summary>
+        [XmlElement(Namespace = Namespaces.NamespaceCon)]
+        public string NumSerieFactura { get; set; }
+
+        /// <summary>
         /// Datos contraparte factura.
         /// </summary>
-        [XmlElement(Namespace = Namespaces.NamespaceSF)]
-        public Interlocutor Contraparte { get; set; }
+        [XmlElement(Namespace = Namespaces.NamespaceCon)]
+        public Contraparte Contraparte { get; set; }
 
         /// <summary>
         /// Rango fechas de expedición.
@@ -71,7 +78,7 @@ namespace VeriFactu.Xml.Factu.Consulta
         /// <summary>
         /// Sistema informático.
         /// </summary>
-        [XmlElement(Namespace = Namespaces.NamespaceSF)]
+        [XmlElement(Namespace = Namespaces.NamespaceCon)]
         public SistemaInformatico SistemaInformatico { get; set; }
 
         /// <summary>
@@ -79,12 +86,6 @@ namespace VeriFactu.Xml.Factu.Consulta
         /// </summary>
         [XmlElement(Namespace = Namespaces.NamespaceCon)]
         public ClavePaginacion ClavePaginacion { get; set; }
-
-        /// <summary>
-        /// Datos adicionales respuesta.
-        /// </summary>
-        [XmlElement(Namespace = Namespaces.NamespaceSF)]
-        public DatosAdicionalesRespuesta DatosAdicionalesRespuesta { get; set; }
 
         #endregion
 

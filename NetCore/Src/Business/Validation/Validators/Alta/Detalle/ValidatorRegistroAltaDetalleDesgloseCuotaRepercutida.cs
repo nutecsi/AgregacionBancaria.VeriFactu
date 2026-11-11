@@ -88,6 +88,9 @@ namespace VeriFactu.Business.Validation.Validators.Alta.Detalle
         protected override List<string> GetBlockErrors()
         {
 
+            // 3.1.3 Validaciones de negocio de la agrupación RegistroAlta en el bloque de RegistroFactura.
+            //      15. Agrupación Desglose / DetalleDesglose. 
+
             var result = new List<string>();
 
             var cuotaRepercutida = XmlParser.ToDecimal(_DetalleDesglose.CuotaRepercutida);
@@ -108,20 +111,32 @@ namespace VeriFactu.Business.Validation.Validators.Alta.Detalle
                         var taxBase = (baseImponibleACoste == 0) ? baseImponibleOimporteNoSujeto : baseImponibleACoste;
                         var texBase = (baseImponibleACoste == 0) ? "BaseImponibleOimporteNoSujeto" : "BaseImponibleACoste";
 
-                        // CuotaRepercutida y BaseImponibleOimporteNoSujeto deben tener el mismo signo.
-                        if ((cuotaRepercutida/Math.Abs(cuotaRepercutida)) != (taxBase / Math.Abs(taxBase)))
-                            result.Add($"Error en el bloque RegistroAlta ({_RegistroAlta}) en el detalle {_DetalleDesglose}:" +
-                                    $" CuotaRepercutida y {texBase} deben tener el mismo signo.");
+                        if (taxBase == 0)
+                        {
 
-                        // Si [BaseImponibleOimporteNoSujeto] ≤ 1.000,00:
-                        // [CuotaRepercutida]=([BaseImponibleOimporteNoSujeto] * TipoImpositivo) +/- 1% de[BaseImponibleOimporteNoSujeto]
-                        // (y en todo caso se admite una diferencia de +/- 10,00 euros). (CREO QUE ESTO ESTÁ MAL REDACTADO !!!)
+                            result.Add($"[3.1.3-15.7.0] Error en el bloque RegistroAlta ({_RegistroAlta}) en el detalle {_DetalleDesglose}:" +
+                                $" El valor de la base imponible no puede ser 0.");
 
-                        var maxDiff = 10m;
+                        }
+                        else 
+                        {
 
-                        if (Math.Abs(taxBase * tipoImpositivo / 100 - cuotaRepercutida) > maxDiff)
-                            result.Add($"Error en el bloque RegistroAlta ({_RegistroAlta}) en el detalle {_DetalleDesglose}:" +
-                                $" [CuotaRepercutida]=([{texBase}] * TipoImpositivo) +/- {maxDiff:#,##0.00}%.");
+                            // CuotaRepercutida y BaseImponibleOimporteNoSujeto deben tener el mismo signo.
+                            if ((cuotaRepercutida / Math.Abs(cuotaRepercutida)) != (taxBase / Math.Abs(taxBase)))
+                                result.Add($"[3.1.3-15.7.1] Error en el bloque RegistroAlta ({_RegistroAlta}) en el detalle {_DetalleDesglose}:" +
+                                        $" CuotaRepercutida y {texBase} deben tener el mismo signo.");
+
+                            // Si [BaseImponibleOimporteNoSujeto] ≤ 1.000,00:
+                            // [CuotaRepercutida]=([BaseImponibleOimporteNoSujeto] * TipoImpositivo) +/- 1% de[BaseImponibleOimporteNoSujeto]
+                            // (y en todo caso se admite una diferencia de +/- 10,00 euros). (CREO QUE ESTO ESTÁ MAL REDACTADO !!!)
+
+                            var maxDiff = 10m;
+
+                            if (Math.Abs(taxBase * tipoImpositivo / 100 - cuotaRepercutida) > maxDiff)
+                                result.Add($"[3.1.3-15.7.2] Error en el bloque RegistroAlta ({_RegistroAlta}) en el detalle {_DetalleDesglose}:" +
+                                    $" [CuotaRepercutida]=([{texBase}] * TipoImpositivo) +/- {maxDiff:#,##0.00}%.");
+
+                        }
 
                     }
 
@@ -129,7 +144,7 @@ namespace VeriFactu.Business.Validation.Validators.Alta.Detalle
                 else 
                 {
 
-                    result.Add($"Error en el bloque RegistroAlta ({_RegistroAlta}) en el detalle {_DetalleDesglose}:" +
+                    result.Add($"[3.1.3-15.7.3] Error en el bloque RegistroAlta ({_RegistroAlta}) en el detalle {_DetalleDesglose}:" +
                            $" CuotaRepercutida solo podrá ser distinta de cero (positivo o negativo)" +
                            $" si CalificacionOperacion es “S1“.");
 

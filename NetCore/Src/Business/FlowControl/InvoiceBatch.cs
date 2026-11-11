@@ -41,9 +41,11 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Security.Cryptography.X509Certificates;
 using VeriFactu.Business.Operations;
 using VeriFactu.Common;
 using VeriFactu.Common.Exceptions;
+using VeriFactu.Net;
 using VeriFactu.Xml;
 using VeriFactu.Xml.Factu;
 using VeriFactu.Xml.Factu.Fault;
@@ -70,6 +72,51 @@ namespace VeriFactu.Business.FlowControl
         /// Si los registros ya están en la cadena de bloques (<see cref="Post()"/>).
         /// </summary>
         bool _Posted;
+
+        #endregion
+
+        #region Propiedades Privadas de Instacia
+
+        /// <summary>
+        /// Sobre SOAP de respuesta de la AEAT.
+        /// </summary>
+        internal Envelope ResponseEnvelope { get; set; }
+
+        /// <summary>
+        /// Error Fault.
+        /// </summary>
+        internal Fault ErrorFault
+        {
+
+            get
+            {
+
+                if (ResponseEnvelope == null)
+                    return null;
+
+                return ResponseEnvelope.Body.Registro as Fault;
+
+            }
+
+        }
+
+        /// <summary>
+        /// Respueta AEAT.
+        /// </summary>
+        internal RespuestaRegFactuSistemaFacturacion RespuestaRegFactuSistemaFacturacion
+        {
+
+            get
+            {
+
+                if (ResponseEnvelope == null)
+                    return null;
+
+                return ResponseEnvelope.Body.Registro as RespuestaRegFactuSistemaFacturacion;
+
+            }
+
+        }
 
         #endregion
 
@@ -102,12 +149,16 @@ namespace VeriFactu.Business.FlowControl
         /// Envío el lote de facturas a la AEAT.
         /// </summary>
         /// <param name="invoiceActions">Lista de acciones para registros de factura.</param>
+        /// <param name="certificate">Certificado para la petición.</param>
         /// <returns>Devuelve La respuesta de la AEAT al envío.</returns>
-        internal RespuestaRegFactuSistemaFacturacion Send(List<InvoiceAction> invoiceActions)
+        internal RespuestaRegFactuSistemaFacturacion Send(List<InvoiceAction> invoiceActions, X509Certificate2 certificate = null)
         {
 
             if (invoiceActions == null || invoiceActions.Count == 0)
                 throw new ArgumentException("El argumento invoiceActions debe contener elementos.");
+
+            if (ResponseEnvelope != null)
+                throw new InvalidOperationException("Esta instancia de lote ya ha sido enviada a la AEAT.");
 
             Envelope envelope = null;
             InvoiceAction first = invoiceActions[0];
@@ -146,12 +197,14 @@ namespace VeriFactu.Business.FlowControl
 
             var xml = new XmlParser().GetBytes(envelope, Namespaces.Items);
 
-            var response = last.Send(xml);
+            var response = last.Send(xml, certificate);
 
             var envelopeRespuesta = last.GetResponseEnvelope(response);
 
-            File.WriteAllBytes($"{first.InvoiceEntryPath}{first.InvoiceEntryID}.{last.InvoiceEntryID}.xml", xml);
-            File.WriteAllText($"{first.ResponsesPath}{first.InvoiceEntryID}.{last.InvoiceEntryID}.xml", response);
+            ResponseEnvelope = envelopeRespuesta;
+
+            File.WriteAllBytes(Path.Combine(first.InvoiceEntryPath, $"{first.InvoiceEntryID}.{last.InvoiceEntryID}.xml"), xml);
+            File.WriteAllText(Path.Combine(first.ResponsesPath, $"{first.InvoiceEntryID}.{last.InvoiceEntryID}.xml"), response);
 
             var respuesta = (envelopeRespuesta.Body.Registro as RespuestaRegFactuSistemaFacturacion);
 
@@ -160,7 +213,7 @@ namespace VeriFactu.Business.FlowControl
             
                 var fault = (envelopeRespuesta.Body.Registro as Fault);
 
-                if (fault == null)
+                if (ErrorFault == null)
                     throw new Exception("No se ha podido recuperar la respuesta de la AEAT correctamente.");
                 else
                     throw new FaultException(fault);
@@ -176,8 +229,9 @@ namespace VeriFactu.Business.FlowControl
         /// de envío y devolviendolos en una lista.
         /// </summary>
         /// <param name="invoiceActions">Lista de elementos a contabilizar.</param>
+        /// <param name="certificate">Certificado para la firma.</param>
         /// <returns>Lista de los elementos a contabilizar.</returns>
-        private List<InvoiceAction> Post(List<InvoiceAction> invoiceActions)
+        private List<InvoiceAction> Post(List<InvoiceAction> invoiceActions, X509Certificate2 certificate)
         {
 
             var registros = new List<Registro>();
@@ -194,7 +248,7 @@ namespace VeriFactu.Business.FlowControl
 
             // Actualizo los cambios
             for (int i = 0; i < invoiceActions.Count; i++)
-                invoiceActions[i].SaveBlockchainChanges();
+                invoiceActions[i].SaveBlockchainChanges(certificate);
 
             return invoiceActions;
 
@@ -276,6 +330,11 @@ namespace VeriFactu.Business.FlowControl
         /// </summary>        
         public string SellerID { get; private set; }
 
+        /// <summary>
+        /// Registro respuesta de la AEAT al envío del lote.
+        /// </summary>
+        public RespuestaRegFactuSistemaFacturacion Response => RespuestaRegFactuSistemaFacturacion;
+
         #endregion
 
         #region Métodos Públicos de Instancia
@@ -317,10 +376,22 @@ namespace VeriFactu.Business.FlowControl
         public void Post()
         {
 
+            Post((X509Certificate2)null);
+
+        }
+
+        /// <summary>
+        /// Contabiliza el lote una sola vez, con el certificado para la firma
+        /// (solo se usa en NO VERI*FACTU).
+        /// </summary>
+        /// <param name="certificate">Certificado para la firma.</param>
+        private void Post(X509Certificate2 certificate)
+        {
+
             if (_Posted)
                 return;
 
-            Post(_InvoiceActions);
+            Post(_InvoiceActions, certificate);
             _Posted = true;
 
         }
@@ -329,13 +400,21 @@ namespace VeriFactu.Business.FlowControl
         /// Contabiliza en la cadena de bloques, envía a la AEAT
         /// y devuelve los resultados del lote.
         /// </summary>
+        /// <param name="certificate">Certificado para la petición.</param>
         /// <returns>Resultado del guardado del lote.</returns>
-        public Dictionary<string, InvoiceAction> Save()
+        public Dictionary<string, InvoiceAction> Save(X509Certificate2 certificate = null)
         {
 
-            Post();
+            // Compruebo el certificado
+            var cert = certificate ?? Wsd.GetCheckedCertificate();
+
+            if (cert == null)
+                throw new Exception("Existe algún problema con el certificado.");
+
+            // Lo ya contabilizado con Post() no se vuelve a contabilizar.
+            Post(cert);
             var postedInvoiceActions = _InvoiceActions;
-            var aeatResponse = Send(postedInvoiceActions);
+            var aeatResponse = Send(postedInvoiceActions, cert);
             return ProcessReponse(aeatResponse, postedInvoiceActions);
 
         }

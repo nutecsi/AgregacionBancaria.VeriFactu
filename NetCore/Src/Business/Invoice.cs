@@ -40,6 +40,7 @@
 using System;
 using System.Collections.Generic;
 using VeriFactu.Business.Validation.NIF.TaxId;
+using VeriFactu.Common;
 using VeriFactu.Config;
 using VeriFactu.Net.Rest.Json;
 using VeriFactu.Xml;
@@ -69,6 +70,11 @@ namespace VeriFactu.Business
         /// </summary>
         RegistroAlta _RegistroAltaSource;
 
+        /// <summary>
+        /// Plain data object con los datos de una factura.
+        /// </summary>
+        InvoiceData _InvoiceData;
+
         #endregion
 
         #region Construtores de Instancia
@@ -86,6 +92,8 @@ namespace VeriFactu.Business
             if (invoiceID == null || sellerID == null)
                 throw new ArgumentNullException($"Los argumentos invoiceID y sellerID no pueden ser nulos.");
 
+            _InvoiceData = new InvoiceData();
+
             InvoiceID = invoiceID.Trim(); // La AEAT calcula el Hash sin espacios
             InvoiceDate = invoiceDate;
 
@@ -101,7 +109,7 @@ namespace VeriFactu.Business
         public Invoice(RegistroAlta registroAlta) : this(registroAlta.IDFacturaAlta.NumSerieFactura,
                 XmlParser.ToDate(registroAlta.IDFacturaAlta.FechaExpedicionFactura), $"{registroAlta.IDFacturaAlta.IDEmisorFactura}")
         {
-
+           
             _RegistroAltaSource = registroAlta;
 
             InvoiceType = registroAlta.TipoFactura;
@@ -111,11 +119,11 @@ namespace VeriFactu.Business
             if (registroAlta.TipoRectificativaSpecified)
                 RectificationType = registroAlta.TipoRectificativa;
 
-            if (registroAlta.Destinatarios.Count > 1)
+            if (registroAlta.Destinatarios != null && registroAlta.Destinatarios.Count > 1)
                 throw new NotImplementedException("El método estático Invoice.FromRegistroAlta" +
                     " no implementa la conversión de RegistrosAlta con más de un destinatario.");
 
-            if (registroAlta.Destinatarios.Count == 1)
+            if (registroAlta.Destinatarios != null && registroAlta.Destinatarios.Count == 1)
             {
 
                 var destinatario = registroAlta.Destinatarios[0];
@@ -131,6 +139,18 @@ namespace VeriFactu.Business
             }
 
             TaxItems = FromDesglose(registroAlta.Desglose);
+            CalculateTotals();
+
+        }
+
+        /// <summary>
+        /// Constructor.
+        /// </summary>
+        /// <param name="invoiceData">Plain Data Object de factura.</param>
+        public Invoice(InvoiceData invoiceData) : this(invoiceData.InvoiceID, invoiceData.InvoiceDate, invoiceData.SellerID)
+        {
+
+            _InvoiceData = invoiceData;
             CalculateTotals();
 
         }
@@ -275,7 +295,8 @@ namespace VeriFactu.Business
 
                 }
 
-                detalleDesglose.ClaveRegimenSpecified = (detalleDesglose.Impuesto == Impuesto.IVA || detalleDesglose.Impuesto == Impuesto.IGIC);
+                detalleDesglose.ClaveRegimenSpecified = (detalleDesglose.Impuesto == Impuesto.IVA || 
+                    detalleDesglose.Impuesto == Impuesto.IPSI || detalleDesglose.Impuesto == Impuesto.IGIC);
 
                 desglose.Add(detalleDesglose);
 
@@ -314,8 +335,13 @@ namespace VeriFactu.Business
             } 
             catch (Exception ex) 
             {
+                
+                Utils.Log($"{ex}");
 
-                throw;
+                if(ex.InnerException as TaxIdEsException != null)
+                    isTaxIdEs = false;
+                else
+                    throw;
 
             }
 
@@ -329,10 +355,24 @@ namespace VeriFactu.Business
                     }
                 };
 
+            // Si el campo IDType = “02” (NIF-IVA), no será exigible el campo CodigoPais.
+            if (BuyerIDType == IDType.NIF_IVA && string.IsNullOrEmpty(BuyerCountryID))
+                return new List<Interlocutor>()
+                {
+                    new Interlocutor
+                    {
+                        NombreRazon = BuyerName,
+                        IDOtro = new IDOtro()
+                        {
+                            ID = BuyerID,
+                            IDType = BuyerIDType
+                        }
+                    }
+                };
 
-            if(string.IsNullOrEmpty(BuyerCountryID))
+            if (string.IsNullOrEmpty(BuyerCountryID))
                 throw new Exception($"Error en factura ({this}): Si BuyerID no es un identificador español válido" +
-                    " (NIF, DNI, NIE...) es obligatorio que BuyerCountryID tenga un valor.");
+                    " (NIF, DNI, NIE...) o IDType = “02” (NIF-IVA) es obligatorio que BuyerCountryID tenga un valor.");
 
             bool countryIdValid = Enum.TryParse(BuyerCountryID, out CodigoPais buyerCountryId);
 
@@ -366,28 +406,108 @@ namespace VeriFactu.Business
         /// <summary>
         /// <para>Clave del tipo de factura (L2).</para>
         /// </summary>
-        public TipoFactura InvoiceType { get; set; }
+        public TipoFactura InvoiceType 
+        { 
+
+            get 
+            { 
+
+                return _InvoiceData.InvoiceType; 
+
+            } 
+            set 
+            {
+
+                _InvoiceData.InvoiceType = value; 
+
+            } 
+
+        }
 
         /// <summary>
         ///  Identifica si el tipo de factura rectificativa
         ///  es por sustitución o por diferencia (L3).
         /// </summary>
-        public TipoRectificativa RectificationType { get; set; }
+        public TipoRectificativa RectificationType
+        {
+
+            get
+            {
+
+                return _InvoiceData.RectificationType;
+
+            }
+            set
+            {
+
+                _InvoiceData.RectificationType = value;
+
+            }
+
+        }
 
         /// <summary>
         /// Identificador de la factura.
         /// </summary>
-        public string InvoiceID { get; private set; }
+        public string InvoiceID
+        {
+
+            get
+            {
+
+                return _InvoiceData.InvoiceID;
+
+            }
+            private set
+            {
+
+                _InvoiceData.InvoiceID = value;
+
+            }
+
+        }
 
         /// <summary>
         /// Fecha emisión de documento.
         /// </summary>        
-        public DateTime InvoiceDate { get; private set; }
+        public DateTime InvoiceDate
+        {
+
+            get
+            {
+
+                return _InvoiceData.InvoiceDate;
+
+            }
+            private set
+            {
+
+                _InvoiceData.InvoiceDate = value;
+
+            }
+
+        }
 
         /// <summary>
         /// Fecha operación.
         /// </summary>        
-        public DateTime? OperationDate { get; set; }
+        public DateTime? OperationDate
+        {
+
+            get
+            {
+
+                return _InvoiceData.OperationDate;
+
+            }
+            set
+            {
+
+                _InvoiceData.OperationDate = value;
+
+            }
+
+        }
 
         /// <summary>
         /// Identificador del vendedor.
@@ -395,13 +515,44 @@ namespace VeriFactu.Business
         /// En caso de no existir, se puede utilizar el número DUNS 
         /// o cualquier otro identificador acordado.
         /// </summary>        
-        public string SellerID { get; private set; }
+        public string SellerID
+        {
+
+            get
+            {
+
+                return _InvoiceData.SellerID;
+
+            }
+            private set
+            {
+
+                _InvoiceData.SellerID = value;
+
+            }
+
+        }
 
         /// <summary>
         /// Nombre del vendedor.
         /// </summary>        
-        [Json(Name = "CompanyName")]
-        public string SellerName { get; set; }
+        public string SellerName
+        {
+
+            get
+            {
+
+                return _InvoiceData.SellerName;
+
+            }
+            set
+            {
+
+                _InvoiceData.SellerName = value;
+
+            }
+
+        }
 
         /// <summary>
         /// Identidicador del comprador.
@@ -409,87 +560,337 @@ namespace VeriFactu.Business
         /// En caso de no existir, se puede utilizar el número DUNS 
         /// o cualquier otro identificador acordado.
         /// </summary>        
-        [Json(Name = "RelatedPartyID")]
-        public string BuyerID { get; set; }
+        public string BuyerID
+        {
+
+            get
+            {
+
+                return _InvoiceData.BuyerID;
+
+            }
+            set
+            {
+
+                _InvoiceData.BuyerID = value;
+
+            }
+
+        }
 
         /// <summary>
         /// Nombre del comprador.
         /// </summary>        
-        [Json(Name = "RelatedPartyName")]
-        public string BuyerName { get; set; }
+        public string BuyerName
+        {
+
+            get
+            {
+
+                return _InvoiceData.BuyerName;
+
+            }
+            set
+            {
+
+                _InvoiceData.BuyerName = value;
+
+            }
+
+        }
 
         /// <summary>
         /// Código del país del destinatario (a veces también denominado contraparte,
         /// es decir, el cliente) de la operación de la factura expedida.
         /// <para>Alfanumérico (2) (ISO 3166-1 alpha-2 codes) </para>
         /// </summary>        
-        [Json(Name = "CountryID")]
-        public string BuyerCountryID { get; set; }
+        public string BuyerCountryID
+        {
+
+            get
+            {
+
+                return _InvoiceData.BuyerCountryID;
+
+            }
+            set
+            {
+
+                _InvoiceData.BuyerCountryID = value;
+
+            }
+
+        }
 
         /// <summary>
         /// Clave para establecer el tipo de identificación
         /// en el pais de residencia. L7.
         /// </summary>        
-        [Json(ExcludeOnDefault = true, Name = "RelatedPartyIDType")]
-        public IDType BuyerIDType { get; set; }
+        public IDType BuyerIDType
+        {
+
+            get
+            {
+
+                return _InvoiceData.BuyerIDType;
+
+            }
+            set
+            {
+
+                _InvoiceData.BuyerIDType = value;
+
+            }
+
+        }
 
         /// <summary>
         /// Importe total: Total neto + impuestos soportado
         /// - impuestos retenidos.
         /// </summary>        
-        public decimal TotalAmount { get; private set; }
+        public decimal TotalAmount
+        {
+
+            get
+            {
+
+                return _InvoiceData.TotalAmount;
+
+            }
+            private set
+            {
+
+                _InvoiceData.TotalAmount = value;
+
+            }
+
+        }
 
         /// <summary>
         /// Total impuestos soportados.
         /// </summary>        
-        public decimal TotalTaxOutput { get; private set; }
+        public decimal TotalTaxOutput
+        {
+
+            get
+            {
+
+                return _InvoiceData.TotalTaxOutput;
+
+            }
+            private set
+            {
+
+                _InvoiceData.TotalTaxOutput = value;
+
+            }
+
+        }
 
         /// <summary>
         /// Total impuestos soportados.
         /// </summary>        
-        public decimal TotalTaxOutputSurcharge { get; private set; }
+        public decimal TotalTaxOutputSurcharge
+        {
+
+            get
+            {
+
+                return _InvoiceData.TotalTaxOutputSurcharge;
+
+            }
+            private set
+            {
+
+                _InvoiceData.TotalTaxOutputSurcharge = value;
+
+            }
+
+        }
 
         /// <summary>
         /// Importe total impuestos retenidos.
         /// </summary>        
-        public decimal TotalTaxWithheld { get; set; }
+        public decimal TotalTaxWithheld
+        {
+
+            get
+            {
+
+                return _InvoiceData.TotalTaxWithheld;
+
+            }
+            private set
+            {
+
+                _InvoiceData.TotalTaxWithheld = value;
+
+            }
+
+        }
 
         /// <summary>
         /// Texto del documento.
         /// </summary>
-        public string Text { get; set; }
+        public string Text
+        {
+
+            get
+            {
+
+                return _InvoiceData.Text;
+
+            }
+            set
+            {
+
+                _InvoiceData.Text = value;
+
+            }
+
+        }
 
         /// <summary>
         /// Líneas de impuestos.
         /// </summary>
-        public List<TaxItem> TaxItems { get; set; }
+        public List<TaxItem> TaxItems
+        {
+
+            get
+            {
+
+                return _InvoiceData.TaxItems;
+
+            }
+            set
+            {
+
+                _InvoiceData.TaxItems = value;
+
+            }
+
+        }
 
         /// <summary>
-        /// Facturas rectificadas.
+        /// Esta colección almacena la información de las facturas modificados
+        /// por la presenta factura. Estas modificaciones pueden provenir de
+        /// dos situaciónes distintas:
+        /// <para>1. La factura es del tipo F3 y se trata de la conversión de una
+        /// factura simplificada a factura normal.</para>
+        /// <para>2. Se trata de una factura rectificativa: R1, R2, R3, R4, R5.</para>
+        /// Según la situación la información irá en el RegistroAlta en el
+        /// bloque de FacturasRectificadas o en el de FacturasSustituidas.
         /// </summary>
-        public List<RectificationItem> RectificationItems { get; set; }
+        public List<RectificationItem> RectificationItems
+        {
+
+            get
+            {
+
+                return _InvoiceData.RectificationItems;
+
+            }
+            set
+            {
+
+                _InvoiceData.RectificationItems = value;
+
+            }
+
+        }
 
         /// <summary>
         /// BaseRectificada para rectificativas por sustitución 'S'.
         /// </summary>        
-        public decimal RectificationTaxBase { get; set; }
+        public decimal RectificationTaxBase
+        {
+
+            get
+            {
+
+                return _InvoiceData.RectificationTaxBase;
+
+            }
+            set
+            {
+
+                _InvoiceData.RectificationTaxBase = value;
+
+            }
+
+        }
 
         /// <summary>
         /// CuotaRectificada para rectificativas por sustitución 'S'.
         /// </summary>        
-        public decimal RectificationTaxAmount { get; set; }
+        public decimal RectificationTaxAmount
+        {
+
+            get
+            {
+
+                return _InvoiceData.RectificationTaxAmount;
+
+            }
+            set
+            {
+
+                _InvoiceData.RectificationTaxAmount = value;
+
+            }
+
+        }
 
         /// <summary>
         /// CuotaRecargoRectificado para rectificativas por sustitución 'S'.
         /// </summary>
-        public decimal RectificationTaxAmountSurcharge { get; set; }
+        public decimal RectificationTaxAmountSurcharge
+        {
+
+            get
+            {
+
+                return _InvoiceData.RectificationTaxAmountSurcharge;
+
+            }
+            set
+            {
+
+                _InvoiceData.RectificationTaxAmountSurcharge = value;
+
+            }
+
+        }
+
+        /// <summary>
+        /// Parámetros en forma key1=value1&amp;key2=value2
+        /// para incluir información adicional en referencia a la
+        /// factura.
+        /// </summary>
+        public string Parameters
+        {
+
+            get
+            {
+
+                return _InvoiceData.Parameters;
+
+            }
+            set
+            {
+
+                _InvoiceData.Parameters = value;
+
+            }
+
+        }
+
 
         /// <summary>
         /// RegistroAlta a partir del cual se ha creado la factura, en el
         /// caso de que la instancia se haya creado a partir de un registro
         /// de alta.
         /// </summary>
-        [Json(JsonIgnore = true)]
         public RegistroAlta RegistroAltaSource 
         {
 
@@ -502,9 +903,23 @@ namespace VeriFactu.Business
 
         }
 
-        #endregion     
+        #endregion
 
         #region Métodos Públicos de Instancia
+
+        /// <summary>
+        /// Representación de la clase en formato
+        /// JSON.
+        /// </summary>
+        /// <returns>Representación de la clase en formato
+        /// JSON.</returns>
+        public override string ToJson() 
+        {
+
+            _InvoiceData.ServiceKey = ServiceKey;
+            return _InvoiceData.ToJson();
+
+        }
 
         /// <summary>
         /// Obtiene el registro de alta para verifactu.
@@ -518,7 +933,8 @@ namespace VeriFactu.Business
 
             CalculateTotals();
 
-            // Máximo dos decimales, con el redondeo comercial de la factura (medio céntimo se aleja de cero)
+            // Máximo dos decimales. Mismo criterio que el desglose: el 5 aleja de cero.
+            // ToEven guardaba 1.005 como 1.00 mientras la línea salía 1.01.
             var totalTaxAmount = Math.Round(TotalTaxOutput + TotalTaxOutputSurcharge, 2, MidpointRounding.AwayFromZero);
             var totalAmount = Math.Round(TotalAmount, 2, MidpointRounding.AwayFromZero);
 
@@ -577,20 +993,38 @@ namespace VeriFactu.Business
             if (RectificationItems?.Count > 0) 
             {
 
-                if (!isRectification)
-                    throw new InvalidOperationException("No se pueden incluir elementos en la lista 'RectificationItems'" +
-                        " si InvoiceType no es rectificativa (R1, R2, R3, R4, R5).");
+                IDFactura[] idsFactura = new IDFactura[RectificationItems.Count];
 
-                // Añadimos las factura rectificadas
-                registroAlta.FacturasRectificadas = new IDFactura[RectificationItems.Count];
-
-                for(int rectificationIndex = 0; rectificationIndex< RectificationItems.Count; rectificationIndex++)
-                    registroAlta.FacturasRectificadas[rectificationIndex] =new IDFactura()
+                for (int rectificationIndex = 0; rectificationIndex < RectificationItems.Count; rectificationIndex++)
+                    idsFactura[rectificationIndex] = new IDFactura()
                     {
                         IDEmisorFactura = SellerID,
                         NumSerieFactura = RectificationItems[rectificationIndex].InvoiceID,
                         FechaExpedicionFactura = XmlParser.GetXmlDate(RectificationItems[rectificationIndex].InvoiceDate)
                     };
+
+                // Podemos tener dos situaciones: 
+                //  1. Se trata de una conversión a factura normal de una simplificada (F3)
+                //  2. Se trata de una rectificativa
+
+                if (InvoiceType == TipoFactura.F3) //  1. Se trata de una conversión a factura normal de una simplificada (F3)
+                {
+
+                    // Añadimos las factura sustituidas
+                    registroAlta.FacturasSustituidas = idsFactura;
+
+                }
+                else                                //  2. Se trata de una rectificativa
+                {
+
+                    if (!isRectification)
+                        throw new InvalidOperationException("No se pueden incluir elementos en la lista 'RectificationItems'" +
+                            " si InvoiceType no es rectificativa (R1, R2, R3, R4, R5).");
+
+                    // Añadimos las factura rectificadas
+                    registroAlta.FacturasRectificadas = idsFactura;
+
+                }
 
             }
 

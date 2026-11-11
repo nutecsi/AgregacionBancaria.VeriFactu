@@ -74,21 +74,60 @@ namespace VeriFactu.Business.Validation.Validators.Alta
         protected override List<string> GetBlockErrors()
         {
 
+            // 3.1.3 Validaciones de negocio de la agrupación RegistroAlta en el bloque de RegistroFactura.
+
             var result = new List<string>();
 
             // 7. FechaOperacion
+
+            if (!_FechaOperacionValida)
+                result.Add($"Error en el bloque RegistroAlta ({_RegistroAlta}):" +
+                    $" La propiedad FechaOperacion tiene que tener" +
+                    $" un valor de fecha válido con formato dd-MM-yyyy.");
 
             if (_FechaOperacion != null)
             {
 
                 // La FechaOperacion no debe ser inferior a la fecha actual menos veinte años y no debe ser superior al año siguiente de la fecha actual.
                 if (DateTime.Now.AddYears(-20).CompareTo(_FechaOperacion) > 0)
-                    result.Add($"Error en el bloque RegistroAlta ({_RegistroAlta}):" +
+                    result.Add($"[3.1.3-7.0] Error en el bloque RegistroAlta ({_RegistroAlta}):" +
                         $" La FechaOperacion ({_FechaOperacion:yyyy-MM-dd}) no debe ser inferior a la fecha actual menos veinte años.");
 
-                if ((_FechaOperacion ?? DateTime.Now).Year > DateTime.Now.Year)
-                    result.Add($"Error en el bloque RegistroAlta ({_RegistroAlta}):" +
+                var yearOperacion = (_FechaOperacion ?? DateTime.Now).Year;
+                var maxYear = DateTime.Now.Year + 1;
+
+                if (yearOperacion > maxYear)
+                    result.Add($"[3.1.3-7.1] Error en el bloque RegistroAlta ({_RegistroAlta}):" +
                         $" La FechaOperacion ({_FechaOperacion:yyyy-MM-dd}) no debe ser superior al año siguiente de la fecha actual.");
+
+                // Error 1146
+                // Sólo se permite que la fecha de expedicion de la factura sea anterior a la fecha operación si los detalles del desglose son ClaveRegimen 14 o 15 e Impuesto 01, 03 o vacío.
+
+                if (_FechaExpedicionValida && _FechaExpedicion.CompareTo(_FechaOperacion) < 0)
+                {
+
+                    var detalles = _RegistroAlta.Desglose;
+
+                    if (detalles != null)
+                    {
+
+                        foreach (var detalle in detalles)
+                        {
+
+                            var allowedPrev = (detalle.Impuesto == Xml.Factu.Impuesto.IVA || detalle.Impuesto == Xml.Factu.Impuesto.IGIC) 
+                                && (detalle.ClaveRegimenSpecified&&(detalle.ClaveRegimen == ClaveRegimen.ObraPteDevengoAdmonPublica || 
+                                detalle.ClaveRegimen == ClaveRegimen.TractoSucesivoPteDevengo));
+
+                            if (!allowedPrev)
+                                result.Add($"[3.1.3-7.2] Error en el bloque RegistroAlta ({_RegistroAlta}):" +
+                                    $" Sólo se permite que la fecha de expedicion de la factura sea anterior a la fecha operación si los" +
+                                    $" detalles del desglose son ClaveRegimen 14 o 15 e Impuesto 01, 03 o vacío.");
+
+                        }
+
+                    }
+
+                }
 
             }
 

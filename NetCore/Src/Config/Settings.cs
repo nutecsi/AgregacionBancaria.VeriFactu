@@ -47,9 +47,12 @@ using System.Runtime.InteropServices;
 #endif
 using System.Threading;
 using System.Xml.Serialization;
+using VeriFactu.Business.Events;
+using VeriFactu.Business.FlowControl;
 using VeriFactu.Common;
 using VeriFactu.DataStore;
 using VeriFactu.Net.Rest;
+using VeriFactu.Xml;
 using VeriFactu.Xml.Factu;
 
 namespace VeriFactu.Config
@@ -98,9 +101,14 @@ namespace VeriFactu.Config
             Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData) + $"{_PathSep}VeriFactu{_PathSep}";
 
         /// <summary>
-        /// Ruta al directorio de la cadena de bloques.
+        /// Ruta al directorio de la cadena de bloques de registros de facturación.
         /// </summary>
         string _BlockchainPath;
+
+        /// <summary>
+        /// Ruta al directorio de la cadena de bloques de eventos.
+        /// </summary>
+        string _EventChainPath;
 
         #endregion
 
@@ -163,6 +171,18 @@ namespace VeriFactu.Config
         /// </summary>
         internal static bool BlockchainInitialized;
 
+        /// <summary>
+        /// Indicador de si el sistema de cadena de eventos está
+        /// inicializado.
+        /// </summary>
+        internal static bool EventChainInitialized;
+
+        /// <summary>
+        /// Indicador de si la cola de eventos está
+        /// inicializada.
+        /// </summary>
+        internal static bool EventQueueInitialized;
+
         #endregion
 
         #region Construtores Estáticos
@@ -183,11 +203,45 @@ namespace VeriFactu.Config
             BlockchainInitialized = true; // Inicia cadena de bloques
             Current.SistemaInformatico.IndicadorMultiplesOT = Seller.GetSellers().Count > 1 ? "S" : "N"; // Valor multiples OT
 
+            // No VERI*FACTU
+            if (!string.IsNullOrEmpty(Current.IsNotVerifactu)) 
+            { 
+                
+                EventChainInitialized = EventChain.EventChain.Initialized; // Inicia cadena de eventos
+                EventQueueInitialized = Business.Events.EventQueue.Initialized;     // Inicia cola de eventos
+
+            }
+
         }
 
         #endregion
 
         #region Métodos Privados Estáticos
+
+        /// <summary>
+        /// Construye un serializador XML para la clase Settings con los overrides necesarios
+        /// para la compatibilidad entre versiones por el cambio derivado de
+        /// https://github.com/mdiago/VeriFactu/issues/292
+        /// </summary>
+        /// <returns>Serializador para Settings.</returns>
+        private static XmlSerializer GetSerializer()
+        {
+
+            var overrides = new XmlAttributeOverrides();
+
+            var attributes = new XmlAttributes
+            {
+                XmlType = new XmlTypeAttribute()
+            };
+
+            overrides.Add(
+                typeof(SistemaInformatico),
+                attributes);
+
+            return new XmlSerializer(
+                typeof(Settings),
+                overrides);
+        }
 
 	/// <summary>
 	/// Inicia estaticos.
@@ -200,7 +254,7 @@ namespace VeriFactu.Config
 
 		string FullPath = $"{Path}{_PathSep}" + FileName;
 
-		XmlSerializer serializer = new XmlSerializer(settings.GetType());
+		XmlSerializer serializer = GetSerializer();
 		
 		if (File.Exists(FullPath))
 		{
@@ -286,13 +340,16 @@ namespace VeriFactu.Config
                 InboxPath = $"{Path}Inbox{_PathSep}",
                 OutboxPath = $"{Path}Outbox{_PathSep}",
                 BlockchainPath = $"{Path}Blockchains{_PathSep}",
+                EventChainPath = $"{Path}EventChains{_PathSep}",
                 InvoicePath = $"{Path}Invoices{_PathSep}",
+                EventPath = $"{Path}Events{_PathSep}",
                 LogPath = $"{Path}Log{_PathSep}",
                 CertificateSerial = "",
                 CertificateThumbprint = "",
                 CertificatePath = "",
                 CertificatePassword = "",
                 VeriFactuEndPointPrefix = VeriFactuEndPointPrefixes.Test,
+                VeriFactuEndPointReqPrefix = VeriFactuEndPointPrefixes.TestReq,
                 VeriFactuEndPointValidatePrefix = VeriFactuEndPointPrefixes.TestValidate,
                 VeriFactuHashAlgorithm = TipoHuella.Sha256,
                 VeriFactuHashInputEncoding = "UTF-8",
@@ -311,6 +368,7 @@ namespace VeriFactu.Config
                 Api = new Api() 
                 {
                     EndPointCreate = "https://facturae.irenesolutions.com:8050/Kivu/Taxes/Verifactu/Invoices/Create",
+                    EndPointCreateTI = "https://facturae.irenesolutions.com:8050/Kivu/Taxes/Verifactu/Invoices/CreateTI",
                     EndPointCancel = "https://facturae.irenesolutions.com:8050/Kivu/Taxes/Verifactu/Invoices/Cancel",
                     EndPointGetQrCode = "https://facturae.irenesolutions.com:8050/Kivu/Taxes/Verifactu/Invoices/GetQrCode",
                     EndPointGetSellers = "https://facturae.irenesolutions.com:8050/Kivu/Taxes/Verifactu/Invoices/GetSellers",
@@ -325,7 +383,11 @@ namespace VeriFactu.Config
                 },
                 SkipNifAeatValidation = true,
                 SkipViesVatNumberValidation = true,
-                LoggingEnabled = false
+                LoggingEnabled = false,
+                // La original lo pone a true por defecto (d1722fd): aquí sigue en false para que
+                // ClearPost deshaga el eslabón en memoria como hasta ahora.
+                DisableBlockchainDelete = false,
+                DisableEventChainDelete = true
             };
 
         }
@@ -418,6 +480,12 @@ namespace VeriFactu.Config
         public string OutboxPath { get; set; }
 
         /// <summary>
+        /// Ruta al directorio que actuará como almacén de eventos.
+        /// </summary>
+        [XmlElement("EventPath")]
+        public string EventPath { get; set; }
+
+        /// <summary>
         /// Ruta al directorio que actuará como almacén
         /// de las distintas cadenas de bloques por emisor.
         /// </summary>
@@ -441,6 +509,32 @@ namespace VeriFactu.Config
                 _BlockchainPath = value; 
 
             } 
+        }
+
+        /// <summary>
+        /// Ruta al directorio que actuará como almacén
+        /// de las distintas cadenas de bloques de eventos por emisor.
+        /// </summary>
+        [XmlElement("EventChainPath")]
+        public string EventChainPath
+        {
+            get
+            {
+
+                return _EventChainPath;
+
+            }
+            set
+            {
+
+                if (Current != null && Current.EventChainPath != null && Current.EventChainPath != value
+                    && Directory.GetDirectories(Current.EventChainPath).Length > 0)
+                    throw new InvalidOperationException($"No se puede cambiar el valor" +
+                        $" de 'EventChainPath' si la carpeta no está vacía.");
+
+                _EventChainPath = value;
+
+            }
         }
 
         /// <summary>
@@ -499,6 +593,13 @@ namespace VeriFactu.Config
         public string VeriFactuEndPointPrefix { get; set; }
 
         /// <summary>
+        /// EndPoint del web service de la AEAT para remisión de registros
+        /// de facturación por requerimiento.
+        /// </summary>
+        [XmlElement("VeriFactuEndPointReqPrefix")]
+        public string VeriFactuEndPointReqPrefix { get; set; }
+
+        /// <summary>
         /// EndPoint del web service de la AEAT de validación de Verifactu.
         /// </summary>
         [XmlElement("VeriFactuEndPointValidatePrefix")]
@@ -550,6 +651,30 @@ namespace VeriFactu.Config
         [XmlElement("LoggingEnabled")]
         public bool LoggingEnabled { get; set; }
 
+        /// <summary>
+        /// En entornos de elevada concurrencia la funcionalidad
+        /// de deshacer la inserción en la cadena de registros de facturación
+        /// provoca problemas.
+        /// </summary>
+        [XmlElement("DisableBlockchainDelete")]
+        public bool DisableBlockchainDelete { get; set; }
+
+        /// <summary>
+        /// En entornos de elevada concurrencia la funcionalidad
+        /// de deshacer la inserción en la cadena de eventos
+        /// provoca problemas.
+        /// </summary>
+        [XmlElement("DisableEventChainDelete")]
+        public bool DisableEventChainDelete { get; set; }
+
+        /// <summary>
+        /// Indica si el sistema funciona en modo NO VERI*FACTU.
+        /// Si el valor es nulo o vacío, el sistema funciona
+        /// en modo VERI*FACTU.
+        /// </summary>        
+        [XmlElement("IsNotVerifactu")]
+        public string IsNotVerifactu { get; set; }
+
         #endregion
 
         #region Métodos Públicos Estáticos
@@ -567,7 +692,7 @@ namespace VeriFactu.Config
 		// Capturar Current una sola vez para evitar inconsistencias
 		var currentSettings = Current;
 
-		XmlSerializer serializer = new XmlSerializer(currentSettings.GetType());
+		XmlSerializer serializer = GetSerializer();
 
 		using (StreamWriter w = new StreamWriter(FullPath))
 		{
@@ -599,6 +724,12 @@ namespace VeriFactu.Config
 		if (!Directory.Exists(Current.LogPath))
 			Directory.CreateDirectory(Current.LogPath);
 
+		if (Current.EventChainPath != null && !Directory.Exists(Current.EventChainPath))
+			Directory.CreateDirectory(Current.EventChainPath);
+
+		if (Current.EventPath != null && !Directory.Exists(Current.EventPath))
+			Directory.CreateDirectory(Current.EventPath);
+
 	}
 
 	/// <summary>
@@ -614,6 +745,21 @@ namespace VeriFactu.Config
 	}
 
 	/// <summary>
+	/// Finaliza los procesos en segundo plano iniciados por la configuración.
+	/// </summary>
+	public static void End()
+	{
+
+		// Finalizamos la cola de facturas.
+		InvoiceQueue.Exit();
+
+		// En modo NO VERI*FACTU finalizamos también la cola de eventos.
+		if (!string.IsNullOrEmpty(Current.IsNotVerifactu))
+			EventQueue.Exit();
+
+	}
+
+	/// <summary>
 	/// Carga settings desde un archivo específico y retorna la instancia.
 	/// Útil para preparar settings antes de hacer Push().
 	/// </summary>
@@ -624,7 +770,7 @@ namespace VeriFactu.Config
 		var settings = new Settings();
 		string fullPath = $"{Path}{_PathSep}{fileName}";
 
-		XmlSerializer serializer = new XmlSerializer(settings.GetType());
+		XmlSerializer serializer = GetSerializer();
 		
 		if (File.Exists(fullPath))
 		{

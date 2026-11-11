@@ -39,6 +39,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Security.Cryptography.X509Certificates;
 using VeriFactu.Common.Exceptions;
 using VeriFactu.Config;
 using VeriFactu.Xml;
@@ -104,6 +105,7 @@ namespace VeriFactu.Business.Operations
 
             invoice.InvoiceType = registroAlta.TipoFactura;
             invoice.SellerName = sellerName;
+            invoice.Text = registro?.DatosRegistroFacturacion?.DescripcionOperacion; 
 
             if (registroAlta.TipoRectificativaSpecified)
                 invoice.RectificationType = registroAlta.TipoRectificativa;
@@ -139,6 +141,57 @@ namespace VeriFactu.Business.Operations
         #region Métodos Privados de Instancia
 
         /// <summary>
+        /// Devuelve un interlocutor a partir del obligado
+        /// tributario al que pertenece la instancia.
+        /// </summary>
+        /// <returns> Interlocutor a partir del obligado
+        /// tributario al que pertenece la instancia.</returns>
+        private Interlocutor GetInterlocutor() 
+        {
+
+            return new Interlocutor()
+            {
+                NombreRazon = PartyName,
+                NIF = PartyID
+            };
+
+        }
+
+        /// <summary>
+        /// Devuelve un objeto Envelope con el filtro
+        /// para la consulta de facturas emitidas.
+        /// </summary>
+        /// <param name="year">Año a consultar.</param>
+        /// <param name="month">Mes a consultar.</param>
+        /// <param name="isSales">Indica que se trata
+        /// de la consulta de ventas.</param>
+        /// <param name="offset">Id. de la factura de corte para la paginación.</param>
+        /// <returns> Objeto Envelope con el filtro
+        /// para la consulta de facturas emitidas.</returns>
+        private Envelope GetEnvelope(string year, string month, bool isSales, ClavePaginacion offset = null)
+        {
+
+            var registro = GetRegistro(isSales);
+
+            registro.FiltroConsulta.PeriodoImputacion = new Xml.Factu.Consulta.PeriodoImputacion()
+            {
+                Ejercicio = year,
+                Periodo = month.PadLeft(2, '0')
+            };
+
+            registro.FiltroConsulta.ClavePaginacion = offset;
+
+            return new Envelope()
+            {
+                Body = new Body()
+                {
+                    Registro = registro
+                }
+            };
+
+        }
+
+        /// <summary>
         /// Devuelve un objeto Envelope con el filtro
         /// para la consulta de facturas emitidas.
         /// </summary>
@@ -150,33 +203,7 @@ namespace VeriFactu.Business.Operations
         private Envelope GetSalesEnvelope(string year, string month, ClavePaginacion offset = null)
         {
 
-            return new Envelope()
-            {
-                Body = new Body()
-                {
-                    Registro = new ConsultaFactuSistemaFacturacion()
-                    {
-                        Cabecera = new Xml.Factu.Consulta.Cabecera()
-                        {
-                            IDVersion = Settings.Current.IDVersion,
-                            ObligadoEmision = new Interlocutor()
-                            {
-                                NombreRazon = PartyName,
-                                NIF = PartyID
-                            }
-                        },
-                        FiltroConsulta = new FiltroConsulta()
-                        {
-                            PeriodoImputacion = new Xml.Factu.Consulta.PeriodoImputacion()
-                            {
-                                Ejercicio = year,
-                                Periodo = month.PadLeft(2, '0')
-                            },
-                            ClavePaginacion = offset
-                        }
-                    }
-                }
-            };
+            return GetEnvelope(year, month, true, offset);          
 
         }
 
@@ -192,33 +219,7 @@ namespace VeriFactu.Business.Operations
         private Envelope GetPurchasesEnvelope(string year, string month, ClavePaginacion offset = null)
         {
 
-            return new Envelope()
-            {
-                Body = new Body()
-                {
-                    Registro = new ConsultaFactuSistemaFacturacion()
-                    {
-                        Cabecera = new VeriFactu.Xml.Factu.Consulta.Cabecera()
-                        {
-                            IDVersion = Settings.Current.IDVersion,
-                            Destinatario = new Interlocutor()
-                            {
-                                NombreRazon = PartyName,
-                                NIF = PartyID
-                            }
-                        },
-                        FiltroConsulta = new FiltroConsulta()
-                        {
-                            PeriodoImputacion = new Xml.Factu.Consulta.PeriodoImputacion()
-                            {
-                                Ejercicio = year,
-                                Periodo = month.PadLeft(2, '0')
-                            },
-                            ClavePaginacion = offset
-                        }
-                    }
-                }
-            };
+            return GetEnvelope(year, month, false, offset);
 
         }
 
@@ -269,14 +270,45 @@ namespace VeriFactu.Business.Operations
         #region Métodos Públicos de Instancia
 
         /// <summary>
+        /// Devuelve un registro para la consulta de facturas.
+        /// </summary>
+        /// <param name="isSales">Indica que se trata de la consulta
+        /// de factura emitidas. Si su valor es false es para recibidas.</param>
+        /// <returns> Registro para la consulta de facturas.</returns>
+        public ConsultaFactuSistemaFacturacion GetRegistro(bool isSales = true)
+        {
+
+            var interlocutor = GetInterlocutor();
+
+            var registro = new ConsultaFactuSistemaFacturacion()
+            {
+                Cabecera = new Xml.Factu.Consulta.Cabecera()
+                {
+                    IDVersion = Settings.Current.IDVersion
+                },
+                FiltroConsulta = new FiltroConsulta()
+            };
+
+            if (isSales)
+                registro.Cabecera.ObligadoEmision = interlocutor;
+            else
+                registro.Cabecera.Destinatario = interlocutor;
+
+            return registro;
+
+        }
+
+        /// <summary>
         /// Devuelve las facturas emitidas por el NIF
         /// facilitado en la propiedad PartyID.
         /// </summary>
         /// <param name="year">Año a consultar.</param>
         /// <param name="month">Mes a consultar.</param>
         /// <param name="offset">Id. de la factura de corte para la paginación.</param>
+        /// <param name="certificate">Certificado para la petición.</param>
         /// <returns>Facturas emitidas registradas en la AEAT.</returns>
-        public RespuestaConsultaFactuSistemaFacturacion GetSales(string year, string month, ClavePaginacion offset = null) 
+        public RespuestaConsultaFactuSistemaFacturacion GetSales(string year, string month,
+            ClavePaginacion offset = null, X509Certificate2 certificate = null) 
         {
 
             if (offset != null && offset?.IDEmisorFactura == null)
@@ -284,7 +316,7 @@ namespace VeriFactu.Business.Operations
 
             var envelope = GetSalesEnvelope(year, month, offset);
             var xml = new XmlParser().GetBytes(envelope, Namespaces.Items);
-            var response = InvoiceActionMessage.SendXmlBytes(xml, _Action);
+            var response = InvoiceActionMessage.SendXmlBytes(xml, _Action, certificate);
             var envelopeResponse = Envelope.FromXml(response);
 
             var fault = envelopeResponse.Body.Registro as Fault;
@@ -303,14 +335,48 @@ namespace VeriFactu.Business.Operations
         /// <param name="year">Año a consultar.</param>
         /// <param name="month">Mes a consultar.</param>
         /// <param name="offset">Id. de la factura de corte para la paginación.</param>
+        /// <param name="certificate">Certificado para la petición.</param>
         /// <returns>Facturas emitidas registradas en la AEAT.</returns>
-        public RespuestaConsultaFactuSistemaFacturacion GetPurchases(string year, string month, ClavePaginacion offset = null)
+        public RespuestaConsultaFactuSistemaFacturacion GetPurchases(string year, string month,
+            ClavePaginacion offset = null, X509Certificate2 certificate = null)
         {
 
             if (offset != null && offset?.IDEmisorFactura == null)
                 offset.IDEmisorFactura = PartyID;
 
             var envelope = GetPurchasesEnvelope(year, month, offset);
+            var xml = new XmlParser().GetBytes(envelope, Namespaces.Items);
+            var response = InvoiceActionMessage.SendXmlBytes(xml, _Action, certificate);
+            var envelopeResponse = Envelope.FromXml(response);
+
+            var fault = envelopeResponse.Body.Registro as Fault;
+
+            if (fault != null)
+                throw new FaultException(fault);
+
+            return envelopeResponse.Body.Registro as RespuestaConsultaFactuSistemaFacturacion;
+
+        }
+
+        /// <summary>
+        /// Devuelve las facturas por el NIF
+        /// facilitado en la propiedad PartyID.
+        /// </summary>
+        /// <param name="registro"> Instancia de la clase ConsultaFactuSistemaFacturacion.</param>
+        /// <param name="certificate">Certificado para la petición.</param>
+        /// <returns>Facturas registradas en la AEAT.</returns>
+        public RespuestaConsultaFactuSistemaFacturacion GetDocuments(ConsultaFactuSistemaFacturacion registro,
+            X509Certificate2 certificate = null)
+        {
+
+            var envelope = new Envelope()
+            {
+                Body = new Body()
+                {
+                    Registro = registro
+                }
+            };
+
             var xml = new XmlParser().GetBytes(envelope, Namespaces.Items);
             var response = InvoiceActionMessage.SendXmlBytes(xml, _Action);
             var envelopeResponse = Envelope.FromXml(response);

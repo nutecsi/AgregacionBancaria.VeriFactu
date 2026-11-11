@@ -89,6 +89,9 @@ namespace VeriFactu.Business.Validation.Validators.Alta.Detalle
         protected override List<string> GetBlockErrors()
         {
 
+            // 3.1.3 Validaciones de negocio de la agrupación RegistroAlta en el bloque de RegistroFactura.
+            //      15. Agrupación Desglose / DetalleDesglose. 
+
             var result = new List<string>();
 
             // Si Impuesto = “01” (IVA) o no se cumplimenta (considerándose “01” - IVA) y CalificacionOperacion = “S1”:
@@ -100,12 +103,23 @@ namespace VeriFactu.Business.Validation.Validators.Alta.Detalle
 
                 // Si FechaOperacion (FechaExpedicionFactura de la agrupación IDFactura si no se informa FechaOperacion)
                 // ≥ 1 de julio de 2022 y ≤ 30 de septiembre de 2024 se admitirá TipoImpositivo = 5.
-                var fechaOperacion = _FechaOperacion ?? _FechaExpedicion;
+
+                var fechaAplicable = FechaAplicable;
+
+                if (!fechaAplicable.HasValue)
+                    return result;
+
+                var fechaOperacion = fechaAplicable.Value;
                 var allowedFive = fechaOperacion.CompareTo(new DateTime(2022, 7, 1)) >= 0 && fechaOperacion.CompareTo(new DateTime(2024, 9, 30)) <= 0;
 
                 // Si FechaOperacion (FechaExpedicionFactura de la agrupación IDFactura si no se informa FechaOperacion)
                 // ≥ 1 de octubre de 2024 y ≤ 31 de diciembre de 2024 se admitirá el TipoImpositivo = 2 y el TipoImpositivo = 7,5.
                 var allowedLastRates = fechaOperacion.CompareTo(new DateTime(2024, 10, 1)) >= 0 && fechaOperacion.CompareTo(new DateTime(2024, 12, 31)) <= 0;
+
+                // Las dos ventanas temporales son disjuntas, por lo que basta con
+                // sustituir la lista base por la de la ventana correspondiente.
+                if (allowedFive)
+                    allowedRates = new decimal[] { 0m, 4m, 5m, 10m, 21m };
 
                 if (allowedLastRates)
                     allowedRates = new decimal[] { 0m, 2m, 4m, 7.5m, 10m, 21m };
@@ -114,7 +128,7 @@ namespace VeriFactu.Business.Validation.Validators.Alta.Detalle
                 var isTipoImpositivoOK = Array.IndexOf(allowedRates, tipoImpositivo) != -1;
 
                 if(!isTipoImpositivoOK)
-                    result.Add($"Error en el bloque RegistroAlta ({_RegistroAlta}) en el detalle {_DetalleDesglose}:" +
+                    result.Add($"[3.1.3-15.1.0] Error en el bloque RegistroAlta ({_RegistroAlta}) en el detalle {_DetalleDesglose}:" +
                         $" Solo se permiten TipoImpositivo = {string.Join(", ", allowedRates)}" +
                         $" en la fecha {fechaOperacion:yyyy-MM-dd} (valores que indican el tanto por ciento).");
 

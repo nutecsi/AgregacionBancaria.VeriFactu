@@ -88,21 +88,26 @@ namespace VeriFactu.Business.Validation.Validators.Alta.Detalle.Regimen
         protected override List<string> GetBlockErrors()
         {
 
+            // 3.1.3 Validaciones de negocio de la agrupación RegistroAlta en el bloque de RegistroFactura.
+            //      15. Agrupación Desglose / DetalleDesglose. 
+            //          15.6 ClaveRegimen 
+
             var result = new List<string>();
+
+            // 1206 = Si ClaveRegimen es 11 TipoImpositivo ha de ser 21%.
 
             // Si Impuesto = “01” (IVA) o no se cumplimenta (considerándose “01” - IVA):
             // Si ClaveRegimen = “11”:
             // Únicamente se admitirá el TipoImpositivo = 21.
-            if (_DetalleDesglose.Impuesto != Impuesto.IVA)
+            if (_DetalleDesglose.Impuesto == Impuesto.IVA)
             {
 
                 if (XmlParser.ToDecimal(_DetalleDesglose.TipoImpositivo) != 21)
-                    result.Add($"Error en el bloque RegistroAlta ({_RegistroAlta}) en el detalle {_DetalleDesglose}:" +
+                    result.Add($"[3.1.3-15.6.8.0] Error en el bloque RegistroAlta ({_RegistroAlta}) en el detalle {_DetalleDesglose}:" +
                         $" Cuando ClaveRegimen sea igual a “11”" +
                         $" Únicamente se admitirá el TipoImpositivo = 21.");
 
             }
-
 
             return result;
 

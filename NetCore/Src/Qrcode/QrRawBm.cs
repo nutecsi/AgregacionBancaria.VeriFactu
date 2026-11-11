@@ -101,10 +101,13 @@ namespace VeriFactu.Qrcode
         /// <param name="b">Valor del azul.</param>
         public void SetPixel(int x, int y, byte r, byte g, byte b)
         {
+            // Opaco
+            const byte a = 255;
             int offset = ((Height - y - 1) * Width + x) * 4;
             ImageBytes[offset + 0] = b;
             ImageBytes[offset + 1] = g;
             ImageBytes[offset + 2] = r;
+            ImageBytes[offset + 3] = a;
         }
 
         /// <summary>
@@ -133,6 +136,10 @@ namespace VeriFactu.Qrcode
 
             // B. BITMAPINFOHEADER
 
+            // https://github.com/mdiago/VeriFactu/discussions/159
+            var horizontalResolution = 3780;
+            var verticalResolution = 3780;
+
             // 1. the size of this header, in bytes (40)
             bmpBytes[14] = 40;
             // 2. the bitmap width in pixels (signed integer)
@@ -150,9 +157,9 @@ namespace VeriFactu.Qrcode
             // 8. the image size. This is the size of the raw bitmap data; a dummy 0 can be given for BI_RGB bitmaps.
             Array.Copy(BitConverter.GetBytes(0), 0, bmpBytes, 34, 4);
             // 9. the horizontal resolution of the image. (pixel per metre, signed integer)
-            Array.Copy(BitConverter.GetBytes(0), 0, bmpBytes, 38, 4);
+            Array.Copy(BitConverter.GetBytes(horizontalResolution), 0, bmpBytes, 38, 4);
             // 10. the vertical resolution of the image. (pixel per metre, signed integer)
-            Array.Copy(BitConverter.GetBytes(0), 0, bmpBytes, 42, 4);
+            Array.Copy(BitConverter.GetBytes(verticalResolution), 0, bmpBytes, 42, 4);
             //11. the number of colors in the color palette, or 0 to default to 2n
             Array.Copy(BitConverter.GetBytes(0), 0, bmpBytes, 46, 4);
             // 12. the number of important colors used, or 0 when every color is important; generally ignored
