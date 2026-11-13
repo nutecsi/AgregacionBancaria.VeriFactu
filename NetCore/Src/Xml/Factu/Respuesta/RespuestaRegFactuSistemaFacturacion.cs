@@ -69,9 +69,10 @@ namespace VeriFactu.Xml.Factu.Respuesta
         public Cabecera Cabecera { get; set; }
 
         /// <summary>
-        /// Tiempo espera envío.
+        /// Tiempo espera envío, en segundos. Tipo6Type en RespuestaSuministro.xsd: hasta cuatro dígitos.
+        /// Como byte, una respuesta de más de 255 s no se podía leer y se perdía con el lote ya registrado.
         /// </summary>
-        public byte TiempoEsperaEnvio { get; set; }
+        public int TiempoEsperaEnvio { get; set; }
 
         /// <summary>
         /// Estado del envío.
