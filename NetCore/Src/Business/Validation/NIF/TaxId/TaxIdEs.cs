@@ -415,7 +415,8 @@ namespace VeriFactu.Business.Validation.NIF.TaxId
                         default:
                             throw new TaxIdEsException("Unknown TaxIdentificationType.");
                     }
-                    if (this.TaxIdentificationType == TaxIdEsTypes.NIF)
+                    // Los NIF K, L y M son de personas físicas: su carácter de control es la letra del DNI, no el de entidad.
+                    if (this.TaxIdentificationType == TaxIdEsTypes.NIF && this.PersonType == TaxIdEsPersonTypeCode.LegalEntity)
                     {
                         IsDCOK = (IsDCNum) ? (GetDCNif() == (TaxIdEsDCNif)DCNum) : 
                             (GetDCNif() == (TaxIdEsDCNif)Enum.Parse(typeof(TaxIdEsDCNif), DCStr));
@@ -510,7 +511,9 @@ namespace VeriFactu.Business.Validation.NIF.TaxId
         {
             try
             {
-                int nCif = (TaxCode[0] > 57) ?  // Si es una letra entonces se trata de un NIE
+                int nCif = (TaxCode[0] == 'K' || TaxCode[0] == 'L' || TaxCode[0] == 'M') ?  // NIF K, L o M: solo los 7 dígitos
+                    Int32.Parse(TaxCode.Substring(1, 7)) :
+                    (TaxCode[0] > 57) ?  // Si es una letra entonces se trata de un NIE
                     ((int)TaxCode[0] - (int)'X') * (int)Math.Pow(10, 7) + Int32.Parse(TaxCode.Substring(1, 7)) : // X=0, Y=1, Z=2
                     Int32.Parse(TaxCode.Substring(0, 8));
                 /* Resto de división entre 23 */
