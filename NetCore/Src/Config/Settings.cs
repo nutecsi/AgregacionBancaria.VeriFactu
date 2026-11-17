@@ -89,9 +89,12 @@ namespace VeriFactu.Config
 	static readonly object _GlobalCurrentLock = new object();
 
 	/// <summary>
-	/// Ruta al directorio de configuración.
+	/// Ruta al directorio de configuración. Con la variable de entorno <c>VERIFACTU_DATA_HOME</c>, <c>{VERIFACTU_DATA_HOME}/VeriFactu/</c>
+	/// en cualquier plataforma (como <c>XDG_DATA_HOME</c> en Linux, que macOS no mira): un proceso, o unas pruebas, eligen su carpeta.
 	/// </summary>
 	static readonly string _Path =
+            !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("VERIFACTU_DATA_HOME")) ?
+            Environment.GetEnvironmentVariable("VERIFACTU_DATA_HOME").TrimEnd(_PathSep) + $"{_PathSep}VeriFactu{_PathSep}" :
 #if !LE_461
             RuntimeInformation.IsOSPlatform(OSPlatform.Create("IOS")) || RuntimeInformation.IsOSPlatform(OSPlatform.Create("ANDROID")) ?
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + $"{_PathSep}VeriFactu{_PathSep}" :
