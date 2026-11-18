@@ -56,6 +56,11 @@ namespace VeriFactu.Xml.Factu.Alta
         /// </summary>   
         ClaveRegimen _ClaveRegimen;
 
+        /// <summary>
+        /// <para>Impuesto de aplicación.</para>
+        /// </summary>
+        Impuesto _Impuesto;
+
         #endregion
 
 
@@ -82,8 +87,34 @@ namespace VeriFactu.Xml.Factu.Alta
         /// <para>02: Impuesto sobre la Producción, los Servicios y la Importación (IPSI) de Ceuta y Melilla</para>
         /// <para>03: Impuesto General Indirecto Canario (IGIC)</para>
         /// <para>05: Otros</para>
+        /// <para>Como es opcional, un registro leído que no lo trae no lo
+        /// escribe al volver a serializarse (<see cref="ImpuestoSpecified"/>):
+        /// así se conserva tal cual el XML de otro sistema.</para>
         /// </summary>
-        public Impuesto Impuesto { get; set; }
+        public Impuesto Impuesto
+        {
+
+            get
+            {
+
+                return _Impuesto;
+
+            }
+            set
+            {
+
+                _Impuesto = value;
+                ImpuestoSpecified = true;
+
+            }
+
+        }
+
+        /// <summary>
+        ///  Con true se serializa el dato, con false no.
+        /// </summary>
+        [XmlIgnore]
+        public bool ImpuestoSpecified { get; set; }
 
         /// <summary>
         /// <para>Clave que identificará el tipo de régimen del
